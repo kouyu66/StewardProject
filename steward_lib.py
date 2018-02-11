@@ -184,3 +184,95 @@ def mnToModule(pn_number):
         return 'D5437 AIC'
     else:
         return
+
+def get_os_name():
+    OS_type = 'null'
+    sysstr = platform.system()
+    if (sysstr == "Windows"):
+        OS_type = 'Windows'
+    elif (sysstr == "Linux"):
+        Resf = ()
+        cmdf = 'cat /proc/version'
+        Resf = sys_cmd_out_noprint(cmdf)
+        if Resf[0] == 0:
+            if "Red Hat" in Resf[1][0]:
+                cmds = 'cat /etc/redhat-release'
+                Ress = sys_cmd_out_noprint(cmds)
+                if Ress[0] == 0:
+                    if "CentOS" in Ress[1][0]:
+                        OS_type = 'CentOS'
+                    elif "Red Hat" in Ress[1][0]:
+                        OS_type = 'RHEL'
+                    else:
+                        return 1
+                else:
+                    return 2
+            elif "Ubuntu" in Resf[1][0]:
+                OS_type = 'Ubuntu'
+            elif "SuSE" in Resf[1][0]:
+                OS_type = 'SLES'
+            elif "Debian" in Resf[1][0]:
+                OS_type = 'Debian'
+            else:
+                return 3
+        else:
+            return 4
+    return OS_type
+
+def _build_rc_linux(argv=[]):
+    '''
+    Build startup file into system start up task
+    :param argv: The command string
+    :return:
+    '''
+    rc_name = os.path.basename(argv[0])+'-rc'
+    os_name = get_os_name()
+    level=os.popen('runlevel | awk {\'print $2\'}').readline()
+    if os_name == 'RHEL' or os_name == 'CentOS':
+        rc_init = os.path.join('/etc/rc.d/init.d/', rc_name)
+        rc_link = os.path.join('/etc/rc.d/rc%s.d/' % (level.strip()), 'S99'+rc_name)
+    elif os_name == 'Ubuntu' or os_name == 'Debian':
+        rc_init = os.path.join('/etc/init.d/', rc_name)
+        rc_link = os.path.join('/etc/rc%s.d/' % (level.strip()), 'S99'+rc_name)
+    dir = os.path.dirname(os.path.abspath(argv[0]))
+    if os.path.isfile(rc_init):
+        os.remove(rc_init)
+    if os.path.islink(rc_link):
+        os.remove(rc_link)
+    cmd = '%s %s' % (sys.executable, ' '.join(str(i) for i in argv))
+    with open(rc_init, 'w') as f:
+        f.write('''#!/bin/sh
+#chkconfig: 35 99 99
+#description: auto run
+case "$1" in
+    start)
+        date >> /tmp/rc.tmp
+        echo "start $0" | tee -a /tmp/rc.tmp
+        sleep 10
+        cd %s
+        %s 2>&1 &
+    ;;
+    stop)
+        date >> /tmp/rc.tmp
+        echo "stop $0" | tee -a /tmp/rc.tmp
+    ;;
+    *)
+        date >> /tmp/rc.tmp
+        echo "$0: unknow command $1!" | tee -a /tmp/rc.tmp
+        sleep 10
+        cd %s
+        %s 2>&1 &
+    ;;
+esac
+exit 0''' % (dir,cmd,dir,cmd))
+    os.system('sync')
+    os.chown(rc_init, 0, 0)
+    os.chmod(rc_init, stat.S_IRWXU + stat.S_IRGRP + stat.S_IROTH)
+#    os.system('chkconfig --del %s' % (rc_init))
+#    os.system('sleep 1')
+#    os.system('chkconfig --level 35 %s on' % (rc_name))
+    os.system('chown -R root %s' % rc_init)
+    os.system('chmod +x %s' % rc_init)
+    os.system('ln -s %s %s' % (rc_init, rc_link))
+    print("Build rc at %s" % (rc_init))
+    return

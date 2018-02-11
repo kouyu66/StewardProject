@@ -146,11 +146,8 @@ def get_host_info():
         
         return system_info
 
-    def get_error_log(running_scripts): # ll /proc/pid | grep 'cwd' | cut -d ' ' -f 12
-        if running_scripts:
-            pass
-        else:
-            timmer()
+    def get_log_path(running_scripts): # ll /proc/pid | grep 'cwd' | cut -d ' ' -f 12
+
 
 
 def checkRunningScript():
@@ -161,36 +158,30 @@ def checkRunningScript():
         running_script_ps = os.popen("ps -elf | grep -v 'grep' | grep -E '\./ts_.* | \./runio.*'").readlines()  # check running script process
         uptime = float(os.popen("cat /proc/uptime | cut -d ' ' -f 1").readlines()[0])    # 获取系统已经启动了多久 秒数
         start_time = steward_lib.timeStamp()
+        running_scripts = []    # 清空上次running script检查结果
 
         if not running_script_ps:
             pass
         else:
             # running_scripts = [steward_lib.findString(raw_script, '\./.*')[0].strip('\n') for raw_script in running_script_ps]  # 获取运行中脚本名以及参数          
+            
             for raw_script in running_script_ps:    # 正对每条检测到的脚本进程执行操作
                 
                 pid = raw_script.split()[3] # 获取该进程的pid
-                cwd = os.popen("ll /proc/{0} | grep 'cwd' | cut -d ' ' -f 12".format(pid)).readlines()
-
-                if raw_script in last_valid_process:    # 如果该脚本的pid与上次检查的pid一致，则将脚本启动时间置0, 如果不一致，则将启动时间置为当前时间戳，并更新pid信息
-                    last_pid = last_valid_process[raw_script]
-                    if last_pid == pid:
-                        start_time = 0
-                    else:
-                        last_valid_process[raw_script] = pid
-                        start_time = steward_lib.timeStamp()
-                else:
-                    last_valid_process[raw_script] = pid    # 如果该脚本为首次启动，则将启动时间置为当前时间戳，并将pid存入字典作为本次pid
-                    start_time = steward_lib.timeStamp()
+                cwd = os.popen("ll /proc/{0} | grep 'cwd' | cut -d ' ' -f 12".format(pid)).readlines()[0]
+                last_pid = last_valid_process.get(raw_script)
+                
+                if last_pid == pid: # 如果当前pid与上次pid一致，则将start_time置零
+                    start_time = 0
+                else:   # 如果pid与last_pid不一致或者last_pid不存在，则认为当前进程为新进程，更新start_time为当前时间戳
+                    last_valid_process[raw_script] = pid
+                    start_time = steward_lib.timeStamp()                    
 
                 if 'pts' in raw_script:     # 通过进程开启用户为'pts' 判断该进程为用户手动开启的进程，
                     script_start_type = [0, start_time, cwd, steward_lib.findString(raw_script, '\./.*')[0].strip('\n')] # 0 表示手动启动的测试脚本                    
                 else:
                     script_start_type = [1, start_time, cwd, steward_lib.findString(raw_script, '\./.*')[0].strip('\n')] # 1 表示自动启动的测试脚本
-                # trace = start_time + ' ' + script_start_type[1]
-                # with open('trace.txt', 'a+')as f:
-                #     f.write(trace + '\n')
-                # f.close()
-                running_scripts = []
+
                 running_scripts.append(script_start_type)
         sendInfo()        
         time.sleep(3)
