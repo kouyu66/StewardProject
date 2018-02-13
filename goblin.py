@@ -171,7 +171,12 @@ def checkRunningScript(frequence=3):
     5. 3s后跳至第一步
     
     """
-    
+    def env_check(tool_path='/ge/auto', t_path='/system_repo'):
+        """
+        1. 挂载T盘
+        2. 创建测试脚本存放目录
+        3. 拷贝测试脚本及测试工具
+        4. 安装python3
+        """
 
-def sendInfo():
-    
+# def sendInfo():
