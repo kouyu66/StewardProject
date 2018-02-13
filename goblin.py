@@ -151,15 +151,18 @@ def get_host_info():
 
 
 def checkRunningScript(frequence=3):
-    """循环监控，每3秒一次反馈当前测试机脚本运行状态，并获取脚本名及运行参数
+    """
+    循环监控，每3秒一次反馈当前测试机脚本运行状态，并获取脚本名及运行参数
     logic:
-    1. 读取上次检测到的 node信息，test trace信息，以及trace进度信息
-    2. 获取当前node信息，test trace信息，以及trace进度信息
+    1. 读取上次检测到的 node信息，test trace信息.
+    2. 获取当前node信息，test trace信息.
     3. 对比三项信息进行判断：
         1. 侦测test_trace变动(相对于上次)
             1. 新增：添加到本次test trace信息表中
             2. 减少：判断对应的SSD是否存在：
-                1. 存在：标记该trace测试完成，发送test_complete信号，添加到本次test_trace信息表中
+                1. 存在：
+                        1. 已标记为完成，删除trace.
+                        2. 未标记为完成，标记该trace测试完成，发送test_complete信号，添加到本次test_trace信息表中.
                 2. 不存在: 检查上次trace是否标记为测试完成：
                         1. 是： 认为本次丢卡为卡弹出动作，与测试无关，发送card_eject信号，删除trace.
                         2. 否： 测试过程中卡丢失，发送test_fail信号，删除trace.
@@ -169,5 +172,6 @@ def checkRunningScript(frequence=3):
     
     """
     
+
 def sendInfo():
     
