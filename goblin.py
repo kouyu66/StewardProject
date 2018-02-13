@@ -2,11 +2,14 @@ import socket
 import time
 import os
 import uuid
+import pickle
 import steward_lib
 
 
 global running_scripts
+global nvme_detail
 running_scripts = []
+nvme_detail = []
 # last_known_good = {}
 
 def push(server, data):
@@ -146,44 +149,25 @@ def get_host_info():
         
         return system_info
 
-    def get_log_path(running_scripts): # ll /proc/pid | grep 'cwd' | cut -d ' ' -f 12
 
-
-
-def checkRunningScript():
-    """循环监控，每秒一次反馈当前测试机脚本运行状态，并获取脚本名及运行参数"""
-    last_valid_process = {}
-    while True:
-        
-        running_script_ps = os.popen("ps -elf | grep -v 'grep' | grep -E '\./ts_.* | \./runio.*'").readlines()  # check running script process
-        uptime = float(os.popen("cat /proc/uptime | cut -d ' ' -f 1").readlines()[0])    # 获取系统已经启动了多久 秒数
-        start_time = steward_lib.timeStamp()
-        running_scripts = []    # 清空上次running script检查结果
-
-        if not running_script_ps:
-            pass
-        else:
-            # running_scripts = [steward_lib.findString(raw_script, '\./.*')[0].strip('\n') for raw_script in running_script_ps]  # 获取运行中脚本名以及参数          
-            
-            for raw_script in running_script_ps:    # 正对每条检测到的脚本进程执行操作
-                
-                pid = raw_script.split()[3] # 获取该进程的pid
-                cwd = os.popen("ll /proc/{0} | grep 'cwd' | cut -d ' ' -f 12".format(pid)).readlines()[0]
-                last_pid = last_valid_process.get(raw_script)
-                
-                if last_pid == pid: # 如果当前pid与上次pid一致，则将start_time置零
-                    start_time = 0
-                else:   # 如果pid与last_pid不一致或者last_pid不存在，则认为当前进程为新进程，更新start_time为当前时间戳
-                    last_valid_process[raw_script] = pid
-                    start_time = steward_lib.timeStamp()                    
-
-                if 'pts' in raw_script:     # 通过进程开启用户为'pts' 判断该进程为用户手动开启的进程，
-                    script_start_type = [0, start_time, cwd, steward_lib.findString(raw_script, '\./.*')[0].strip('\n')] # 0 表示手动启动的测试脚本                    
-                else:
-                    script_start_type = [1, start_time, cwd, steward_lib.findString(raw_script, '\./.*')[0].strip('\n')] # 1 表示自动启动的测试脚本
-
-                running_scripts.append(script_start_type)
-        sendInfo()        
-        time.sleep(3)
+def checkRunningScript(frequence=3):
+    """循环监控，每3秒一次反馈当前测试机脚本运行状态，并获取脚本名及运行参数
+    logic:
+    1. 读取上次检测到的 node信息，test trace信息，以及trace进度信息
+    2. 获取当前node信息，test trace信息，以及trace进度信息
+    3. 对比三项信息进行判断：
+        1. 侦测test_trace变动(相对于上次)
+            1. 新增：添加到本次test trace信息表中
+            2. 减少：判断对应的SSD是否存在：
+                1. 存在：标记该trace测试完成，发送信号，添加到本次test_trace信息表中
+                2. 不存在: 检查上次trace是否标记为测试完成：
+                        1. 是： 认为本次丢卡为卡弹出动作，与测试无关，删除trace，发送卡弹出信号
+                        2. 否： 测试fail，卡丢失，删除trace，发送test_fail信号
+        2. 更新时间戳
+    4. 将本次检查写入磁盘
+    5. 3s后跳至第一步
+    
+    """
+    
 def sendInfo():
     
