@@ -159,10 +159,10 @@ def checkRunningScript(frequence=3):
         1. 侦测test_trace变动(相对于上次)
             1. 新增：添加到本次test trace信息表中
             2. 减少：判断对应的SSD是否存在：
-                1. 存在：标记该trace测试完成，发送信号，添加到本次test_trace信息表中
+                1. 存在：标记该trace测试完成，发送test_complete信号，添加到本次test_trace信息表中
                 2. 不存在: 检查上次trace是否标记为测试完成：
-                        1. 是： 认为本次丢卡为卡弹出动作，与测试无关，删除trace，发送卡弹出信号
-                        2. 否： 测试fail，卡丢失，删除trace，发送test_fail信号
+                        1. 是： 认为本次丢卡为卡弹出动作，与测试无关，发送card_eject信号，删除trace.
+                        2. 否： 测试过程中卡丢失，发送test_fail信号，删除trace.
         2. 更新时间戳
     4. 将本次检查写入磁盘
     5. 3s后跳至第一步
