@@ -276,3 +276,8 @@ exit 0''' % (dir,cmd,dir,cmd))
     os.system('ln -s %s %s' % (rc_init, rc_link))
     print("Build rc at %s" % (rc_init))
     return
+
+def linux_command_output_to_list(command):
+    out_put_object = os.popen(command).readlines()
+    out_put_list = [x.strip() for x in out_put_object]
+    return out_put_list
