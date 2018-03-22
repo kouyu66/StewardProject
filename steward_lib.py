@@ -164,28 +164,6 @@ def multiThreadDeamon(funcname, listname):
         threads[num].start()
     return
 
-def mnToModule(pn_number):
-    match_D5450_AIC = findString(pn_number, 'MMM-\w{4}H')
-    if match_D5450_AIC:
-        return 'D5450 AIC'
-    match_D5450_U_2 = findString(pn_number, 'MMM-\w{4}U')
-    if match_D5450_U_2:
-        return 'D5450 U.2'
-    match_D5430_AIC = findString(pn_number, 'MMR-\w{4}H')
-    if match_D5430_AIC:
-        return 'D5430 AIC'
-    match_D5430_U_2 = findString(pn_number, 'MMR-\w{4}U')
-    if match_D5430_U_2:
-        return 'D5430 U.2'
-    match_D5436_AIC = findString(pn_number, 'USR-\w{4}H')
-    if match_D5436_AIC:
-        return 'D5436 AIC'
-    match_D5437_AIC = findString(pn_number, 'UTR-\w{4}H')
-    if match_D5437_AIC:
-        return 'D5437 AIC'
-    else:
-        return
-
 def get_os_name():
     OS_type = 'null'
     sysstr = platform.system()
