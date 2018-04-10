@@ -57,6 +57,7 @@ def main():
         else:
             sensor_temp.sort()
             return sensor_temp   # 返回一个由小到大排列的非零sensor温度列表
+            # 出现问题：当所有nand均为0时，函数将由于列表中仅包含一个cpu温度造成[-2]outOfRange报错
         # cpu_sensor = max(sensor_temp)
         # sensor_temp.remove(cpu_sensor)  # 弹出cpu温度
         # nand_max_temp = max(sensor_temp)    # 获取温度最高的nand温度值
