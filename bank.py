@@ -10,6 +10,7 @@ import threading
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 6001))
 s.listen(5)
+s.setsockopt(socket.SOL_SOCYET,socket.SO_REUSEADDR,1)
 
 def dataRecv(sock, addr):
     '''循环等待客户端发出数据，如果发送空数据则断开链接，发送非空数据则交由 infomationExchange 函数处理'''
@@ -31,11 +32,11 @@ def infomationExchange(data):
         decode_data = data.decode('utf-8').split()
         opcode = decode_data[0]
 
-        if opcode == 'g0':  # 发送常规测试机数据，g0 数据格式为[g0,send_reason,sys_info,card_info,script_info,error_bit]
+        if opcode == 'HB':  # 常量数据与上次检测一致，则客户端仅发送HeartBeat消息
             print(decode_data)
             return
 
-        elif opcode == 'g1':
+        elif opcode == 'Err':   # 检测到错误信息，则发送
             print('bank recv g1')
         elif opcode == 'g2':
             print('bank recv g2')
