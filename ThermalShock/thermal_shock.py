@@ -9,6 +9,21 @@ from random import choice
 
 def main():
 
+    def get_ssd_info(ssd='/dev/nvme0'):
+        lspci_cmd = 'lspci -vvv | grep Non-V -A 20'
+        state_cmd = './nvme dera state {0}'.format(ssd)
+        
+        lspci = os.popen(lspci_cmd).readlines()
+        lspci_str = ''
+        for line in lspci:
+            lspci_str = lspci_str + line
+        
+        state = os.popen(state_cmd).readlines()
+        state_str = ''
+        for line in state_str:
+            state_str = state_str + line
+        return lspci_str + '\n' + state_str
+
     def temp_sets(high_temps=[55],low_temps=[-20,-10,0,10],rt=[25],mode='mix'): # 根据参数生成需要测试的温度组合
         mix_temp = []
         mix_temp.extend(high_temps)
@@ -52,11 +67,22 @@ def main():
                 continue
             else:
                 sensor_temp.append(sensor)
-        if not sensor_temp:
-            return [0,0]
-        else:
-            sensor_temp.sort()
-            return sensor_temp   # 返回一个由小到大排列的非零sensor温度列表
+        
+        if len(sensor_temp) < 2:    
+            '''
+            说明所有sensor为0C(这种情况不太可能 出现)，或者只有一个非零cpu温度在列表里，
+            这种情况可能造成调用该函数的程序出现超程报错，故强制补充两个0到sensor_temp变量中
+            '''
+            sensor_temp.extend([0,0])
+        
+        sensor_temp.sort()
+        return sensor_temp   # 返回一个由小到大排列的非零sensor温度列表
+
+        # if not sensor_temp: # 如果所有值均为0，强制返回一个包含两个0的列表，以免后续调用出现超程错误
+        #     return [0,0]
+        # elif sensor_temp == 1:  # 如果该列表中只存了一个cpu的温度，则说明其他所有sensor的温度已达到0C,故手动添加一个0代表sensor的温度
+        #     sensor_temp.append(0)
+
             # 出现问题：当所有nand均为0时，函数将由于列表中仅包含一个cpu温度造成[-2]outOfRange报错
         # cpu_sensor = max(sensor_temp)
         # sensor_temp.remove(cpu_sensor)  # 弹出cpu温度
@@ -93,21 +119,21 @@ def main():
             print('ssd format error')
             return
 
-    def wait_for_env_temp(temp,offset=3): # 等待环境温度到达预定值附近
+    def wait_for_env_temp(temp,offset=3,wait=60): # 等待环境温度到达预定值附近
         temp = int(temp)
         uppertemp = temp + offset
         lowertemp = temp - offset
         desired_range = range(lowertemp, uppertemp)
-        current_temp = get_sensor_temp()[-2]
+        current_temp = get_sensor_temp()[0]
         env_temp = current_temp - 5
         # run = input('please confirm the chamber set to {0} and press enter to run'.format(temp))
         while env_temp not in desired_range:
             print('waitting for temp to {0}, current env temp is {1}.'.format(temp,str(env_temp)))
             time.sleep(10)
-            current_temp = get_sensor_temp()[-2]
+            current_temp = get_sensor_temp()[0]
             env_temp = current_temp - 5
         print('The temperature reaching the predetermined value: {0}.'.format(env_temp))
-        time.sleep(60) # 等待chamber环境温度趋于稳定，由于温箱温控误差，该值由经验来判断
+        time.sleep(wait) # 等待chamber环境温度趋于稳定，由于温箱温控误差，该值由经验来判断,可传参
         return
 
     def run_time_log(info=''):  # 脚本运行的记录
@@ -189,63 +215,80 @@ def main():
     
     """------ Test Start ------"""
     # temps = temp_sets()
-    temps = [[25,25],[55,-20],[55,10],[55,0],[55,10],[-20,55],[-10,55],[0,55],[10,55]]
-    run_time_log('Test Start. temp sets are {0}'.format(temps))
+    temps = [[55,-20],[55,10],[55,0],[55,10],[-20,55],[-10,55],[0,55],[10,55]]
+    run_time_log('[Start] temp sets are {0}'.format(temps))
 
     for temp_set in temps:
         write_temp = temp_set[0]
         read_temp = temp_set[1]
         filename = '{0}-{1}.csv'.format(write_temp, read_temp)
+        
         """------ Step 0 check env temp ------"""
         print('Test Start. current temp set is {0}|{1}'.format(write_temp,read_temp))
-        run_time_log('{0}|{1} test prepare to run, checking env temp...'.format(write_temp,read_temp))
+        run_time_log('[Check] {0}|{1} test prepare, checking env temp...'.format(write_temp,read_temp))
         print('Step0 Waitting for chamber temp to {0}'.format(write_temp))
         wait_for_env_temp(write_temp)
         print('Step0 complete.')
-        run_time_log('env temp good, start test')
+        run_time_log('[Run] env temp good, start test')
+        
         """------ Step 1 format ssd ------"""
         message = 'Step1, start to format ssd...'
         print(message)
         ssd_format()
         message = 'Step1 complete.'
         print(message)
-        run_time_log('ssd format complete')
+        run_time_log('[Run] ssd format complete')
+        
         """------ Step 2 clr mgc error info ------"""
         print('Step2, start to clear mgc errors...')
         clr_mgcError()
         print('Step2 complete.')
-        run_time_log('clr mgc error complete.')
+        run_time_log('[Run] clr mgc error complete.')
+        
         """------ Step 3 sequential write ------"""
         print('Step3 start to run seq write...')
+        ssd_info = get_ssd_info()
+        run_time_log('[Record] ssd state info before write:\n {0}'.format(ssd_info))
         runIO('w')
+        ssd_info = get_ssd_info()
+        run_time_log('[Record] ssd state info after write:\n {0}'.format(ssd_info))
         temp_after_write = get_sensor_temp()    # 将所有温度sensor的值写入log日志
         print('Step3 complete, current temp is {0}'.format(temp_after_write))
-        run_time_log('seq write complete, current nand temp is {0}'.format(temp_after_write))
+        run_time_log('[Record] seq write complete, current temp is {0}'.format(temp_after_write))
+        
         """------ Step 4 change chamber env temp ------"""
         if write_temp != read_temp:
             print('Step4 waiting chamber change env temp...')
-            wait_for_env_temp(read_temp)
+            wait_for_env_temp(read_temp,3,10)   # 目的是为了创造温度冲击条件，缩短读写中间的等待时间
             print('Step4 complete.')
             # run_time_log('read temp reaching. prepare to seq read')
         else:
             print('same temp testing, start seq read directly')
-        run_time_log('read temp reaching. prepare to seq read')
+        run_time_log('[Run] read temp reaching. prepare to seq read')
+        
         """------ Step 5 sequential read ------"""
         print('Step5 start to run seq read.')
+        ssd_info = get_ssd_info()
+        run_time_log('[Record] ssd state info before read:\n {0}'.format(ssd_info))
         runIO('r')
+        ssd_info = get_ssd_info()
+        run_time_log('[Record] ssd state info after read:\n {0}'.format(ssd_info))
         temp_after_read = get_sensor_temp()
         print('Step5 complete, current temp is {0}'.format(temp_after_read))
-        run_time_log('seq read complete, current nand temp is {0}'.format(temp_after_read))
+        run_time_log('[Record] seq read complete, current temp is {0}'.format(temp_after_read))
+        
         """------ Step 6 get mgc error info ------"""
         print('Step6 start to get mgc error info...')
         list_name = get_mgcError()
         print('Step6 complete.')
-        run_time_log('mgc info dump success, start to generate csv file...')
+        run_time_log('[Run] mgc info dump success, start to generate csv file...')
+        
         """------ Step 7 process mgc error info ------"""
         print('Step7 process mgc error info')        
         list_to_csv(list_name, filename)
         print('Step7 complete.')
-        run_time_log('creat csv file successfully. ')
+        run_time_log('[Run] creat csv file successfully. ')
+        run_time_log('[Done] {0}|{1} test complete'.format(write_temp,read_temp))
 
         print('{0}|{1} test complete'.format(write_temp,read_temp))
         input('press enter to start next round.')
