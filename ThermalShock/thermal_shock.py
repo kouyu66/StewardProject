@@ -198,7 +198,7 @@ def main():
             csv_file.close()
         return
 
-    def runIO(mode='r'): # 调用iovt对SSD做io，只针对3.2T SSD，随机在数据格式为0，1，4，LA中选择一种后续进行传参处理
+    def runIO(mode='r'): # 调用iovt对SSD做io，只针对3.2T SSD，随机在数据格式为0，1，5，LA中选择一种后续进行传参处理
         data_patten_pool = ['0','1','5','LA']
         data_patten = choice(data_patten_pool)
         seq_read_cmd = './iovt -t 4 -j 64 -w 0 -r 1 -s 2980G -b 128K -S -P {0}'.format(data_patten)
@@ -292,5 +292,5 @@ def main():
 
         print('{0}|{1} test complete'.format(write_temp,read_temp))
         input('press enter to start next round.')
-    run_time_log('all sets test complete.')          
+    run_time_log('[End] all sets test complete.')          
 main()
