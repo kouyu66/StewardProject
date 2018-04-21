@@ -3,6 +3,8 @@ import os
 import re
 import time
 import csv
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # 注意，双引号是命令的一部分
 command_list = ['"#419b 0 0"', '"#519b 0 0"', '"#b19b 0 0"', '"#c19b 0 0"'] 
@@ -58,13 +60,64 @@ def list_to_csv(list_name, csv_name, headline):
     return
 
 
-def csv_to_jpg(csv_filename, jpg_filename):
+def csv_to_jpg(csv_filename_list, jpg_filename):
+    # 调用pandas模块处理csv文件，首先将csv文件导入为pandas的dataframe（一种类似sheet页的数据格式）
+    # plt.grid(True)
+    # 构图元素赋值 
+    x = list(range(0, 74))
+    y_list = []
+    for csv_filename in csv_filename_list:
+        df = pd.read_csv(csv_filename)
+        y = df['FrameCnt']
+        y_list.append(y)
+    labels = ['-20,55', '-10,55', '0,55', '10,55', '10,10', '55,-10', '55,0', '55,10', '55,-20', '0,0', '-10,-10', '-20,-20', '55,55', '25,25']
+    colors = ['black', 'silver', 'red', 'orange', 'yellow', 'lime', 'blue', 'purple', 'pink', 'slategray', 'aqua', 'sienna', 'lightsteelblue', 'fuchsia']
+    plt.figure(figsize=(8, 6), dpi=80)
     
+    # 全图
+    plt.subplot(211)
+    plt.grid(True)
+    plt.xticks(x)
+    plt.xlabel('ErrBit')
+    plt.ylabel('Frame Count')
+    x0 = x
+    colors0 = colors[:]
+    for y in y_list:
+        plt.plot(x, y, linewidth=2.0, color=colors0.pop(0))
+    plt.legend(labels)
+    # 前30 ErrBit的图
+    plt.subplot(223)
+    plt.grid(True)
+    plt.xticks(x)
+    plt.xlabel('ErrBit')
+    plt.ylabel('Frame Count')
+    x1 = x[:30]
+    colors1 = colors[:]
+    for y in y_list:
+        y1 = y[:30]
+        plt.plot(x1, y1, linewidth=2.0, color=colors1.pop(0))
+
+    # 后10 ErrBit的图
+    plt.subplot(224)
+    
+    plt.grid(True)
+    plt.xticks(x)
+    plt.xlabel('ErrBit')
+    plt.ylabel('Frame Count')
+    colors2 = colors[:]
+    x2 = x0[-14:]
+    for y in y_list:
+        y2 = y[-14:]
+        plt.plot(x2, y2, linewidth=2.0, color=colors2.pop(0))
+    
+    plt.savefig('mgc1.png')
+    return
 
 
-
-mgc1, mgc2, mgc3, mgc4 = get_mgcErr(command_list)
-mgc_info = [mgc1, mgc2, mgc3, mgc4]
-for mgc in mgc_info:
-    csv_name = temp_set + '_mgc' + str(mgc_info.index(mgc) + 1)
-    list_to_csv(mgc, csv_name, ['ErrBit', 'FrameCnt', 'Rate'])
+csv_filename_list = ['m2055.csv', 'm1055.csv', '055.csv', '1055.csv', '1010.csv', '55m10.csv', '550.csv', '5510.csv', '55m20.csv', '00.csv', 'm10m10.csv', 'm20m20.csv', '5555.csv', '2525.csv']
+csv_to_jpg(csv_filename_list, '55_-10_mgc1.jpg')
+# mgc1, mgc2, mgc3, mgc4 = get_mgcErr(command_list)
+# mgc_info = [mgc1, mgc2, mgc3, mgc4]
+# for mgc in mgc_info:
+#     csv_name = temp_set + '_mgc' + str(mgc_info.index(mgc) + 1)
+#     list_to_csv(mgc, csv_name, ['ErrBit', 'FrameCnt', 'Rate'])

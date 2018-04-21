@@ -175,17 +175,10 @@ def checkRunningScript(frequence=3):
     #     with open(logfile,'r') as lastlog:
     
     def get_current_node_info():
-        list_pci_commamd = "lspci | grep 'Non-Volatile'"
+        list_pci_commamd = "lspci | grep 'Non-Volatile' -A 30"
         nvme_pci_device = steward_lib.linux_command_output_to_list(list_pci_command)
         
 
-
-
-    
-    
-    
-    
-    
     
     def env_check(tool_path='/ge/auto', t_path='/system_repo'):
         """

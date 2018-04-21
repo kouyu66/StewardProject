@@ -7,6 +7,7 @@ import datetime
 import re
 from random import choice
 
+
 def main():
 
     def get_ssd_info(ssd='/dev/nvme0'):
@@ -20,7 +21,7 @@ def main():
         
         state = os.popen(state_cmd).readlines()
         state_str = ''
-        for line in state_str:
+        for line in state:
             state_str = state_str + line
         return lspci_str + '\n' + state_str
 
@@ -119,7 +120,7 @@ def main():
             print('ssd format error')
             return
 
-    def wait_for_env_temp(temp,offset=3,wait=60): # 等待环境温度到达预定值附近
+    def wait_for_env_temp(temp,offset=1,wait=60): # 等待环境温度到达预定值附近
         temp = int(temp)
         uppertemp = temp + offset
         lowertemp = temp - offset
@@ -215,17 +216,17 @@ def main():
     
     """------ Test Start ------"""
     # temps = temp_sets()
-    temps = [[55,-20],[55,10],[55,0],[55,10],[-20,55],[-10,55],[0,55],[10,55]]
+    temps = [[-10,55],[-20,55]]
     run_time_log('[Start] temp sets are {0}'.format(temps))
 
     for temp_set in temps:
         write_temp = temp_set[0]
         read_temp = temp_set[1]
-        filename = '{0}-{1}.csv'.format(write_temp, read_temp)
+        filename = '{0}_{1}.csv'.format(write_temp, read_temp)
         
         """------ Step 0 check env temp ------"""
-        print('Test Start. current temp set is {0}|{1}'.format(write_temp,read_temp))
-        run_time_log('[Check] {0}|{1} test prepare, checking env temp...'.format(write_temp,read_temp))
+        print('Test Start. current temp set is {0} | {1}'.format(write_temp,read_temp))
+        run_time_log('[Check] {0} | {1} test prepare, checking env temp...'.format(write_temp,read_temp))
         print('Step0 Waitting for chamber temp to {0}'.format(write_temp))
         wait_for_env_temp(write_temp)
         print('Step0 complete.')
@@ -259,7 +260,7 @@ def main():
         """------ Step 4 change chamber env temp ------"""
         if write_temp != read_temp:
             print('Step4 waiting chamber change env temp...')
-            wait_for_env_temp(read_temp,3,10)   # 目的是为了创造温度冲击条件，缩短读写中间的等待时间
+            wait_for_env_temp(read_temp,1,1)   # 目的是为了创造温度冲击条件，缩短读写中间的等待时间
             print('Step4 complete.')
             # run_time_log('read temp reaching. prepare to seq read')
         else:
@@ -288,9 +289,10 @@ def main():
         list_to_csv(list_name, filename)
         print('Step7 complete.')
         run_time_log('[Run] creat csv file successfully. ')
-        run_time_log('[Done] {0}|{1} test complete'.format(write_temp,read_temp))
+        run_time_log('[Done] {0} | {1} test complete'.format(write_temp,read_temp))
 
-        print('{0}|{1} test complete'.format(write_temp,read_temp))
+        print('{0} | {1} test complete'.format(write_temp,read_temp))
         input('press enter to start next round.')
+    print('all sets test complete.')
     run_time_log('[End] all sets test complete.')          
 main()

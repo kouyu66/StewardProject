@@ -29,6 +29,7 @@ def list_to_csv(list_name, filename):   # 将数据转换为csv格式的文件
     selected_list = []
     # print(list_name) # kou debug...
     for list_line in list_name:
+        selected = []
         if isinstance(list_line, str):
             list_line.strip('\n')
             if 'ERRBit' in list_line:
@@ -62,7 +63,7 @@ def list_to_csv(list_name, filename):   # 将数据转换为csv格式的文件
                     selected = ['cpu_mask', splited[9]]
             elif not list_line:
                 continue
-            print(selected)    
+            # print(selected)    
             selected_list.append(selected)
     with open(filename,'a',newline='') as csv_file:
         writer = csv.writer(csv_file)
