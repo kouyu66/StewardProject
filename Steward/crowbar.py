@@ -2,6 +2,8 @@
 #coding:utf-8
 import os
 import re
+import time
+from collections import Counter
 
 '''
 ssd测试过程中用到的类信息
@@ -23,7 +25,7 @@ class SSD():
     def load(self):
         '''更新ssd状态信息'''
         # 获取pci速度信息
-        get_pci_speed_cmd = "find /sys/* -name {0}|grep devices|cut -d '/' -f 8|xargs lspci -vvv -s|grep 'LnkSta:'|cut -d ' ' -f 2,4".format(self.diskname)
+        get_pci_speed_cmd = "find /sys/* -name {0}|grep devices|cut -d '/' -f 6|xargs lspci -vvv -s|grep 'LnkSta:'|cut -d ' ' -f 2,4".format(self.diskname)
         pci_speed_info = os.popen(get_pci_speed_cmd).readlines()[0].strip('\n')
         pci_speed_processed = ''.join(pci_speed_info.split(','))
         pcispeed = pci_speed_processed
@@ -78,22 +80,292 @@ class SSD():
         
         return
 
+
+def get_running_script():   # 获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, pid]]
+    '''获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, pid]]'''
+    commands = []
+    # 使用ps命令查看当前进程信息是否包含脚本名
+    get_python3_script_fullname_cmd =  "ps -elf | grep -E 'HotPlug_NVMe_suite\.py|ts_.*\.py.*|runvdb.py.*'|grep -v grep"
+    running_script_full_name = os.popen(get_python3_script_fullname_cmd).readlines()
+    # 对返回的进程信息逐条进行拆分，拆分为命令本身和参数
+    for cmd in running_script_full_name:
+        # 使用正则表达式对进行信息进行拆分，以空格为分隔符
+        cmd_tmp = re.split(' ', cmd)
+        cmd_tmp = [x for x in cmd_tmp if x] # 去掉空字符
+        for splited_cmd in cmd_tmp:
+            command = []
+            # 定位脚本名，及所在位置
+            if '.py' in splited_cmd:
+                pid = cmd_tmp[3]
+                running_script_cmd = splited_cmd
+                # 将脚本名后面的字符串作为参数，重新整合格式[command, args]
+                running_script_args = ' '.join(cmd_tmp[cmd_tmp.index(splited_cmd)+1:]) # 截取脚本名后面的项，整合为空格分隔的字符串
+                running_script_args = running_script_args.strip('\n')
+                command = [running_script_cmd, running_script_args, pid]
+                commands.append(command)
+    return commands
+
+
+def get_machine_status():   # 获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]
+    '''获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]'''
+    # 定义相关命令
+    get_manufacturer_command = 'dmidecode -s system-manufacturer && dmidecode -s system-product-name'
+    get_cpu_type_command = 'dmidecode -s processor-version'
+    get_mem_count_command = 'dmidecode -t memory | grep Size: | grep -v No'
+    get_men_type_command = "dmidecode -t memory | grep 'Type: DDR'|uniq"
+    get_uptime_command = "cat /proc/uptime | cut -d ' ' -f 1"
+    get_nvme_node_command = "ls /dev/nvme* | grep nvme.$"
     
-class Script():
-    def __init__(self):
-        self.scriptname = ''
-        self.scriptargs = ''
-        self.hours = 0
-        self.starttime = ''
-        self.estiend = ''
-    def load(self):
-        def get_script_name():
-            get_python3_script_fullname_cmd =  "ps -elf | grep -E 'ts.*\.py.*|runvdb.py.*'|grep -v grep"
-            running_script_full_name = os.popen(get_python3_script_fullname_cmd).readlines()
+    # 获取服务器厂商，型号信息
+    machine_info = os.popen(get_manufacturer_command).readlines()
+    machine_info = [x.strip('\n').strip() for x in machine_info]
+    manufacturer, machine_type = machine_info
+    # 获取服务器CPU信息
+    cpu_info = os.popen(get_cpu_type_command).readlines()
+    cpu_info = [x.strip('\n').strip() for x in cpu_info]
+    cpus = ' '.join(['{0} * {1}'.format(str(x), str(y)) for x, y in Counter(cpu_info).items()])
+    # 获取服务器内存信息
+    mem_count = os.popen(get_mem_count_command).readlines()
+    mem_count  = [x.strip('\n').strip() for x in mem_count]
+    mem_type = os.popen(get_men_type_command).readlines()
+    mem_type = [x.strip('\n').strip() for x in mem_type][0]
+    mem_dict = Counter(mem_count)
+    mems = ' '.join(['{0} * {1} {2}'.format(str(x), str(y), mem_type) for x, y in mem_dict.items()])
+    # 获取dera nvme ssd字符设备信息
+    node_info = os.popen(get_nvme_node_command).readlines()
+    node_info = [x.strip('\n').strip() for x in node_info]
+    for node in node_info:
+        identify_info = os.popen("./nvme id-ctrl {0} | grep ^vid | cut -d ':' -f 2".format(node)).readlines()
+        identify_info = [x.strip('\n').strip() for x in identify_info][0]
+        if identify_info != '0x1d78':   # 排除非dera ssd
+            node_info.remove(node)
+    # 获取服务器开机时长信息
+    uptime_seconds = os.popen(get_uptime_command).readlines()[0]
+    uptime_seconds = float(uptime_seconds)
+    m, s = divmod(uptime_seconds, 60)
+    h, m = divmod(m, 60)
+    uptime = "%02d:%02d:%02d" % (h, m, s)
+    # 获取服务器当前网络状态信息
+    local = '10.0.4.1' # 本地网关
+    t_disk = '10.0.1.206' # T盘所在服务器的IP地址
+    internet = 'www.baidu.com'  # 外网
+    net_bucket = [local, t_disk, internet]
+    net_status = ['1', '1', '1']
+    for ip in net_bucket:
+        ping_command = 'ping {0} -c 1 -w 1'.format(ip)
+        respond = os.popen(ping_command).readlines()
+        for line in respond:
+            if 'ttl' in line:
+                index = net_bucket.index(ip)
+                net_status[index] = '0'
+            else:
+                pass
+    net_status = ''.join(net_status)
+
+    return [manufacturer, machine_type, cpus, mems, node_info, uptime, net_status]
+
+
+def main():
+
+    while True:
+        # 获取当前运行的脚本，机器状态，及ssd实例
+        traces = []
+        scripts = get_running_script()
+        machine = get_machine_status()
+        ssd = []
+        for ssd_node in machine[4]:
+            var_name = 'nvme%s'%str(machine[4].index(ssd_node))
+            locals()[var_name] = SSD(ssd_node)
+            ssd.append(locals()[var_name])
+        # 以nvme ssd作为标的物，生成trace
+        for nvme in ssd:
+            traces = []
+            nvme.load()
+            node = nvme.node
+            running_script = ''
+            status = 'idle'
+            
+            if scripts:
+                for script in scripts:
+                    if 'ts_pwr.py' in script[0]:
+                        running_script = script
+                        status = 'running'
+                    elif 'ts_top.py' in script[0]:
+                        running_script = script
+                        status = 'running'
+                    elif node in script[1]:
+                        running_script = script
+                        status = 'running'
+                    else:
+                        pass
+            trace = [nvme.names, running_script, status]
+            traces.append(trace)
+            print(traces)
+        time.sleep(2)
+main()
+
+            # locals()['nvme%s'%machine[5].index(ssd_node)] = SSD(ssd_node)
+            # ssd.append(locals()['nvme%s'%machine[5].index(ssd_node)])
             
 
-        def get_script_args()
-        def get_script_time()
+
+
+#             uptime_seconds = os.popen("cat /proc/uptime | cut -d ' ' -f 1").readlins()[0]
+#             m, s = divmod(uptime_seconds, 60)
+#             h, m = divmod(m, 60)
+#             uptime_readable = "%02d:%02d:%02d" % (h, m, s)
+    # dmidecode -s system-manufacturer && dmidecode -s system-product-name
+    # dmidecode -s processor-version
+    # cat /proc/meminfo | grep MemTotal
+    # dmidecode -t memory | grep 'Type: DDR'|uniq 
+    # dmidecode -t memory | grep Size: | grep -v No
+    # ping www.baidu.com -c 3 -w 1
+
+
+# def get_host_info():
+
+#     current_info = []
+    
+#     def get_disk_info():    # return nvme detail [dev, disk_status, dera_type, dera_info, dera_state]
+#         '''判断系统下nvme盘的个数，比对是否有对应的块设备，然后使用固定路径的nvme工具读取info以及state并存入字典，函数返回字典。'''
+#         nvme_detail = []    
+
+#         node_nvme_temp = os.popen("ls /dev/nvme* | grep -E '\/dev\/nvme.$'").readlines() # 包含\n的设备名 /dev/nvme0
+#         block_nvme_temp = os.popen("ls /dev/nvme* | grep -E \/dev\/nvme.n.$").readlines()   # 包含\n的块设备名 /dev/nvme0n1
+#         dera_info_list_temp = os.popen("/ge/auto/nvme dera info | grep '/'").readlines()    # 包含\n的dera info命令返回的信息列表，以
+
+#         node_nvme = [x.strip('\n') for x in node_nvme_temp] # 去掉'\n'
+#         block_nvme = [y.strip('\n') for y in block_nvme_temp]   # 去掉'\n'
+
+#         str_block_nvme = ';'.join(block_nvme)   # 将块设备信息转换为长字符串，便于检查node设备是否包含其中，来判断node设备对应的块设备被正确识别
+
+#         for dev in node_nvme:
+            
+#             dera_info = ''
+#             dera_state = ''
+#             disk_status = ''
+            
+#             if dev in str_block_nvme:   # 如果块设备字符串中包含字符设备，则表明块设备及字符设备均被识别
+#                 disk_status = 0 # 字符设备及块设备均被识别，判断设备正常
+#             else:
+#                 disk_status = 1 # 块设备未被识别，判断设备异常
+            
+#             for info in dera_info_list_temp:
+                
+#                 if dev in info:
+#                     dera_info = ' '.join(info.split())   # 去除多余空格的nvme info信息
+            
+#             pn_number = steward_lib.findString(dera_info, '\w{6}-\w{5}-\w{2}')[0] # 匹配SN号
+#             dera_type = steward_lib.mnToModule(pn_number)   # 将匹配的SN号转换为对应的卡类型
+
+#             dera_state_temp = os.popen("/ge/auto/nvme dera state {0}".format(dev)).readlines()
+#             dera_state = [' '.join(x.split()).strip('\n') for x in dera_state_temp] # 去除多余空格以及换行符以后的dera state状态信息列表
+#             single_disk_info = [dev, disk_status, dera_type, dera_info, dera_state]
+#             nvme_detail.append(single_disk_info)
+
+#         return nvme_detail
+   
+#     def get_system_info():  # return system_info [mac, os_version, kernel_version, mainboard_info, cpu_info, mem_info, boot_drive_info]
+#         """获取 mainboard cpu mem maindisk ip mac os kernel 的信息"""
+        
+#         def boot_drive_info():
+#             """首先获取/boot挂在点对应分区的UUID，然后查找该UUID对应的磁盘信息，判断是机械盘还是nvme盘，如果是机械盘，则调用smartctl命令读取磁盘信息，如果是nvme盘则使用nvme工具"""
+            
+#             boot_drive_node_list = os.popen("cat /etc/fstab | grep 'UUID'| grep '/' | cut -d = -f 2 | cut -d ' ' -f 1 | xargs blkid -U").readlines() # xargs smartctl -a | grep -E "Device Model|Serial Number|Firmware Version|User Capacity"
+#             boot_drive_node = boot_drive_node_list[0].strip('\n')
+        
+#             if '/dev/sd' in boot_drive_node:
+#                 boot_drive_info = os.popen("smartctl -a {0} | grep -E 'Device Model|Serial Number|Firmware Version|User Capacity'".format(boot_drive_node)).readlines()
+#                 # 需要调用smartctl工具， 软件包名为 smartmontools
+#                 if len(boot_drive_info) <= 1:
+#                     boot_drive_info_readable = boot_drive_node # 如果没有安装smartctl，则返回node名称
+                
+#             elif '/dev/nvme' in boot_drive_node:
+#                 boot_drive_info = os.popen("/ge/auto/nvme dera info | grep {0}".format(boot_drive_node)).readlines()
+            
+#             boot_drive_info_readable = [x.strip('\n') for x in boot_drive_info]
+            
+#             return boot_drive_info_readable
+
+#         def os_version_info():
+#             """根据不同的linux操作系统获取version信息"""
+
+#             kernel = os.popen('uname -r').readlines()[0].strip('\n')
+            
+#             os_distro = os.popen("cat /etc/os-release | grep 'ID'| grep -v 'VERSION_ID'|cut -d = -f 2").readlines()[0].strip('\n')
+            
+#             if 'centos' in os_distro or 'redhat' in os_distro:
+#                 os_ver = os.popen("cat /etc/redhat-release").readlines()[0].strip('\n')
+#             elif 'debian' in os_distro:
+#                 os_sub_ver = os.popen("cat /etc/debian_version").readlines()[0].strip('\n')
+#                 os_ver = 'debian {0}'.format(os_sub_ver)
+#             elif 'ubuntu' in os_distro:
+#                 os_ver = os.popen("cat /etc/os-release | grep 'PRETTY_NAME'| cut -d \" -f 2")
+#             else:
+#                 os_ver = 'null'
+#             return os_ver,kernel
+
+#         def cpu_info():
+
+#             cpu_list = os.popen("cat /proc/cpuinfo| grep 'model name' | cut -d : -f 2").readlines()
+#             cpu_core_num = len(cpu_list)
+#             cpu_name = cpu_list[0].strip('\n').strip()
+            
+#             cpu_info = '{0} {1}'.format(cpu_name, cpu_core_num)
+
+#             return cpu_info
+        
+#         def mem_info():
+            
+#             current_mem_info = os.popen("free -h | grep 'Mem'").readlines()
+#             mem_total = [' '.join(x.split()).strip('\n') for x in current_mem_info][0].split()[1]
+            
+#             return mem_total
+        
+#         def mainboard_info():
+#             mainboard_manufacturer = os.popen("dmidecode -t baseboard | grep 'Manufacturer' | cut -d : -f 2").readlines()[0].strip('\n').strip()
+#             mainboard_type = os.popen("dmidecode -t baseboard | grep 'Product Name' | cut -d : -f 2").readlines()[0].strip('\n').strip()
+            
+#             mac = uuid.UUID(int = uuid.getnode()).hex[-12:]
+#             mainboard = '{0} {1}'.format(mainboard_manufacturer, mainboard_type)
+#             return mac, mainboard
+        
+#         def uptime_info():
+#             uptime_seconds = os.popen("cat /proc/uptime | cut -d ' ' -f 1").readlins()[0]
+#             m, s = divmod(uptime_seconds, 60)
+#             h, m = divmod(m, 60)
+#             uptime_readable = "%02d:%02d:%02d" % (h, m, s)
+            
+#             return uptime_readable
+
+#         boot_drive_info = boot_drive_info()
+#         os_version, kernel_version = os_version_info()
+#         cpu_info = cpu_info()
+#         mem_info = mem_info()
+#         mac, mainboard_info = mainboard_info()
+#         uptime_info = uptime_info()
+        
+#         system_info = [mac, os_version, kernel_version, mainboard_info, cpu_info, mem_info, boot_drive_info, uptime_info]
+        
+#         return system_info
+    
+
+# class Script():
+#     def __init__(self):
+#         self.scriptname = ''
+#         self.scriptargs = ''
+#         self.hours = 0
+#         self.starttime = ''
+#         self.estiend = ''
+                
+#     def load(self):
+#         def get_script_name():
+#             get_python3_script_fullname_cmd =  "ps -elf | grep -E 'ts.*\.py.*|runvdb.py.*'|grep -v grep"
+#             running_script_full_name = os.popen(get_python3_script_fullname_cmd).readlines()
+            
+
+#         def get_script_args()
+#         def get_script_time()
     # def update_fw():
     # def update_fwld():
     # def dump():
