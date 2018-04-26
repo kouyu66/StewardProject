@@ -3,12 +3,13 @@
 import os
 import re
 import time
+import pickle
 from collections import Counter
 
 '''
 ssd测试过程中用到的类信息
 '''
-
+# []
 
 class SSD():
     '''一次模拟SSD的尝试'''
@@ -20,9 +21,9 @@ class SSD():
         self.names = [] # [sn, mn, cap, boot, namespace]
         self.status = []    # [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
         self.vers = []  # [fw, fwld, fmt, uefi_driver]
-        self.counters = []  # [powerCycles, powerOnHours, unsafe_shutdowns, media_err, nand_erase_err, nand_program_err, full_rebulid, raw_rebuild, pcie_uncorr_err, pcie_fatal_err, nand_init_fail, init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
-      
-    def load(self):
+        self.counters = []  # [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
+        self.err = [] # [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
+    def load(self): 
         '''更新ssd状态信息'''
         # 获取pci速度信息
         get_pci_speed_cmd = "find /sys/* -name {0}|grep devices|cut -d '/' -f 6|xargs lspci -vvv -s|grep 'LnkSta:'|cut -d ' ' -f 2,4".format(self.diskname)
@@ -74,7 +75,8 @@ class SSD():
             self.names = [sn, mn, cap, boot, namespace]
             self.vers = [fw, fwld, fmt, uefi_driver]
             self.status = [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
-            self.counters = [powerCycles, powerOnHours, unsafe_shutdowns, media_err, nand_erase_err, nand_program_err, full_rebulid, raw_rebuild, pcie_uncorr_err, pcie_fatal_err, nand_init_fail, init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
+            self.counters = [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
+            self.err = [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
         else:
             pass
         
@@ -166,9 +168,27 @@ def get_machine_status():   # 获取当前测试机信息，[厂商, 型号, cpu
 
 
 def main():
+    
+    def timeStamp():
+        now_time = datetime.datetime.now()
+        readable_time = now_time.strftime('%Y-%m-%d_%H_%M_%S')
+        return readable_time
+    
+    def list_compare(current_list, last_list):
+        # 以第一个列表为基准，返回相对于第二个列表来说，增加的元素列表，和减少的元素列表
+        item_add = []
+        item_remove = []
+        for current_item in current_list:
+            if current_item not in last_list:
+                item_add.append(current_item)
+            else:
+                last_list.remove(current_item)
+        if last_list:
+            item_remove = last_list
+        return item_add, item_remove
 
-    while True:
-        # 获取当前运行的脚本，机器状态，及ssd实例
+    def genarate_current_trace(): # [nvme.names, nvme.vers, nvme.status, running_script, status]
+        '''获取当前运行的脚本，机器状态，及ssd实例'''
         traces = []
         scripts = get_running_script()
         machine = get_machine_status()
@@ -179,7 +199,6 @@ def main():
             ssd.append(locals()[var_name])
         # 以nvme ssd作为标的物，生成trace
         for nvme in ssd:
-            traces = []
             nvme.load()
             node = nvme.node
             running_script = ''
@@ -187,7 +206,7 @@ def main():
             
             if scripts:
                 for script in scripts:
-                    if 'ts_pwr.py' in script[0]:
+                    if 'ts_pwr.py' in script[0]:    # 由于ts_pwr和ts_top带有掉电测试，所以是全局式的脚本，所有ssd均受影响，所以只要有一个SSD在运行该测试，则认为所有ssd均受此影响
                         running_script = script
                         status = 'running'
                     elif 'ts_top.py' in script[0]:
@@ -198,9 +217,96 @@ def main():
                         status = 'running'
                     else:
                         pass
-            trace = [nvme.names, running_script, status]
+            trace = [nvme.names, nvme.vers, nvme.status, running_script, status]
             traces.append(trace)
-            print(traces)
+        return traces
+    
+
+    # -------- 以下为主要逻辑区域 --------
+    
+    def core_logic(current_trace, old_trace):
+        # 首先判断两次检测卡的情况，是否有丢卡、重识别卡的情况
+
+        current_card_info = [x[0] for x in current_trace if current_trace]  # 获取当前trace中ssd的names部分
+        last_card_info = [x[0] for x in old_trace if old_trace] # 获取上次扫描中ssd的names部分
+        add_card, remove_card = list_compare(current_card_info, last_card_info) # 判断是否有丢卡，或新识别卡的情况发生
+        normal_card = [x for x in current_card_info if x not in add_card] # 既不是新添加的卡，也不包含弹出的卡
+        machine = get_machine_status()  # 生成当前测试机状态
+
+        if add_card:    # 处理新识别卡，这种情况
+            
+            def process_card_add(add_card):
+                '''
+                1.构建新trace，并通知Server端，归档旧trace，标志为'n(ew)'
+                '''
+                now_time = timeStamp()
+                traces_tobe_send = ['N', now_time]
+                archive = 'N'   # 该字段判断测试是否归档
+                online = 'Y'    # 该字段判断SSD是否在线
+                for card_name in add_card:
+                    for trace in current_trace:
+                        if card_name == trace[0]:
+                            trace_tobe_send = [trace, machine, archive, online]
+                            traces_tobe_send.append(trace_tobe_send)
+                            
+                return traces_tobe_send
+            new_card = process_card_add(add_card)
+
+        if remove_card:
+            
+            def process_card_remove(remove_card):
+                '''
+                1.构建新trace
+                2.检查上次状态是否为idle
+                3.如果上次为idle，则判断本次卡移除动作为正常弹出，报卡弹出给server端, 归档trace
+                4.如果上次为running，则判断本次卡移出动作为丢卡，走丢卡流程， 归档trace
+                '''
+                now_time = timeStamp()
+                traces_tobe_send = ['R', now_time]
+                archive = 'Y'
+                online = 'N'
+                for card_name in remove_card:
+                    for trace in old_trace:
+                        if card_name == trace[0]:
+                            if trace[3]:
+                                trace[4] = 'Lost'
+                            else:
+                                trace[4] = 'Remove'
+                            trace_tobe_send = [trace, machine, archive, online]
+                            traces_tobe_send.append(trace_tobe_send)
+                return traces_tobe_send
+            remove_card = process_card_remove(remove_card)
+        # 其次判断不存在丢卡及新添加卡的测试状态
+        def process_normal_mode(normal_card):
+            '''
+            卡的数量与之前状态一致，则执行该流程
+            1.检查脚本是否与之前一致
+            2.如果一致，则发送heartbeat信号
+            3.如果不一致，则记录状态变化，生成时间戳，发送给server端
+            '''
+            if not normal_card:
+                return
+            for card_name in normal_card:
+
+
+
+
+    while True:
+        
+        current_trace = genarate_current_trace()
+        old_trace = []
+        if os.path.exists('last_scan.pickle'):
+            with open('last_scan.pickle', 'rb') as last_scan:
+                old_trace = pickle.load(last_scan)
+        
+        # 接下来是比对逻辑, 检查SSD信息变动
+
+
+        
+        
+        # 将数据存储到本地文件
+        # with open('last_scan.pickle', 'wb') as last_scan:
+        #     pickle.dump(traces, last_scan)
         time.sleep(2)
 main()
 
