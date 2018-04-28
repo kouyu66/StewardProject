@@ -9,27 +9,44 @@ from collections import Counter
 '''
 ssd测试过程中用到的类信息
 '''
-# []
+
+def list_to_dict(list_info, sep=':'):   # 输入列表， 以分隔符分隔， 输出字典
+    '''将包含冒号的长字符串转换为字典格式'''
+    list_temp = [] 
+    
+    for line in list_info:
+        if line.count(sep) != 1:
+            continue
+        seprate_line = re.split(sep, line)
+        seprate_line = [x.strip('/n').strip() for x in seprate_line]
+        list_temp.append(seprate_line)
+    
+    dict_info = dict(list_temp)
+    
+    return dict_info
+
 
 class SSD():
     '''一次模拟SSD的尝试'''
     def __init__(self, node):
         self.node = node
         self.diskname = re.split('/', self.node)[-1]
+        self.info = {}
         # self.pcispeed = ''
         # self.boot = ''
-        self.names = [] # [sn, mn, cap, boot, namespace]
-        self.status = []    # [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
-        self.vers = []  # [fw, fwld, fmt, uefi_driver]
-        self.counters = []  # [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
-        self.err = [] # [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
+        # self.names = {} # [sn, mn, cap, boot, namespace]
+        # self.status = {}    # [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
+        # self.vers = {}  # [fw, fwld, fmt, uefi_driver]
+        # self.counters = {}  # [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
+        # self.err = {} # [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
     def load(self): 
         '''更新ssd状态信息'''
         # 获取pci速度信息
         get_pci_speed_cmd = "find /sys/* -name {0}|grep devices|cut -d '/' -f 6|xargs lspci -vvv -s|grep 'LnkSta:'|cut -d ' ' -f 2,4".format(self.diskname)
         pci_speed_info = os.popen(get_pci_speed_cmd).readlines()[0].strip('\n')
         pci_speed_processed = ''.join(pci_speed_info.split(','))
-        pcispeed = pci_speed_processed
+        self.info['pcispeed'] = pci_speed_processed
+        
         # 获取boot 信息
         get_boot_drive_cmd = "df -h | grep -E '/boot$'"
         boot_drive_info = os.popen(get_boot_drive_cmd).readlines()[0]
@@ -37,49 +54,17 @@ class SSD():
             boot = 'Master'
         else:
             boot = 'Slave'
-        # 获取sn,mn,cap,format,fw信息
-        get_dera_info_cmd = "./nvme dera info {0} | cut -d ':' -f 2".format(self.node)
-        dera_info = os.popen(get_dera_info_cmd).readlines()
-        dera_info = [x.strip('\n').strip() for x in dera_info]
-        # 获取status信息并提取关键信息
-        get_dera_state_cmd = "./nvme dera state {0} | cut -d ':' -f 2".format(self.node)
-        dera_state = os.popen(get_dera_state_cmd).readlines()
-        dera_state = [x.strip().strip('\n') for x in dera_state]
-
-        if len(dera_info) == 7 and len(dera_state) == 66:
-            sn, mn, namespace, cap, fmt, fw, linebreak = dera_info
-            status = dera_state[0]
-            powerCycles = dera_state[11]
-            powerOnHours = dera_state[12]
-            unsafe_shutdowns = dera_state[13]
-            media_err = dera_state[14]
-            temps = dera_state[18:26]
-            cap_status = dera_state[28]
-            dev_status_up = dera_state[30]
-            nand_erase_err = dera_state[31]
-            nand_program_err = dera_state[32]
-            current_pwr = dera_state[34]
-            full_rebulid = dera_state[37]
-            raw_rebuild = dera_state[39]
-            ddr_err_bit = dera_state[49]
-            pcie_uncorr_err = dera_state[51]
-            pcie_fatal_err = dera_state[52]
-            nand_init_fail = dera_state[54]
-            fwld = dera_state[55]
-            uefi_driver = dera_state[56]
-            gpio_err_bit = dera_state[59]
-            pcie_voltage = dera_state[61]
-            init_pcie_vot_low_cnt = dera_state[64]
-            rt_pcie_vot_low_cnt = dera_state[65]
-            
-            self.names = [sn, mn, cap, boot, namespace]
-            self.vers = [fw, fwld, fmt, uefi_driver]
-            self.status = [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
-            self.counters = [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
-            self.err = [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
-        else:
-            pass
+        self.info['boot'] = boot
         
+        # 获取dera info信息并添加到字典
+        get_dera_info_cmd = "./nvme dera info {0}".format(self.node)
+        dera_info = os.popen(get_dera_info_cmd).readlines()
+        self.info.update(list_to_dict(dera_info))
+
+        # 获取status信息并添加到字典
+        get_dera_state_cmd = "./nvme dera state {0}".format(self.node)
+        dera_state = os.popen(get_dera_state_cmd).readlines()
+        self.info.update(list_to_dict(dera_state))        
         return
 
 
@@ -187,7 +172,7 @@ def main():
             item_remove = last_list
         return item_add, item_remove
 
-    def genarate_current_trace(): # [nvme.names, nvme.vers, nvme.status, running_script, status]
+    def genarate_current_trace(): # 
         '''获取当前运行的脚本，机器状态，及ssd实例'''
         traces = []
         scripts = get_running_script()
@@ -202,58 +187,57 @@ def main():
             nvme.load()
             node = nvme.node
             running_script = ''
-            status = 'idle'
             
             if scripts:
                 for script in scripts:
                     if 'ts_pwr.py' in script[0]:    # 由于ts_pwr和ts_top带有掉电测试，所以是全局式的脚本，所有ssd均受影响，所以只要有一个SSD在运行该测试，则认为所有ssd均受此影响
                         running_script = script
-                        status = 'running'
                     elif 'ts_top.py' in script[0]:
                         running_script = script
-                        status = 'running'
                     elif node in script[1]:
                         running_script = script
-                        status = 'running'
                     else:
                         pass
-            trace = [nvme.names, nvme.vers, nvme.status, running_script, status]
+            add_machine_and_script = dict([['machine', machine], ['script', running_script]])
+            trace = nvme.info
+            trace.update(add_machine_and_script)
             traces.append(trace)
         return traces
     
-
+    # def send_info():
     # -------- 以下为主要逻辑区域 --------
-    
-    def core_logic(current_trace, old_trace):
+    current_traces = genarate_current_trace()
+    # old_traces = read_old_trace()
+
+
+    def core_logic(current_traces, old_traces):
         # 首先判断两次检测卡的情况，是否有丢卡、重识别卡的情况
 
-        current_card_info = [x[0] for x in current_trace if current_trace]  # 获取当前trace中ssd的names部分
-        last_card_info = [x[0] for x in old_trace if old_trace] # 获取上次扫描中ssd的names部分
+        current_cards_sn = [trace['SN'] for trace in current_traces  if current_traces]  # 获取当前trace中ssd的names部分
+        last_cards_sn = [trace['SN'] for trace in old_traces if old_traces] # 获取上次扫描中ssd的names部分
         add_card, remove_card = list_compare(current_card_info, last_card_info) # 判断是否有丢卡，或新识别卡的情况发生
-        normal_card = [x for x in current_card_info if x not in add_card] # 既不是新添加的卡，也不包含弹出的卡
-        machine = get_machine_status()  # 生成当前测试机状态
+        normal_cards_sn = [x for x in current_cards_sn if x not in add_card] # 既不是新添加的卡，也不包含弹出的卡
 
+#-------- 处理新卡插入动作 --------
         if add_card:    # 处理新识别卡，这种情况
-            
             def process_card_add(add_card):
                 '''
-                1.构建新trace，并通知Server端，归档旧trace，标志为'n(ew)'
+                生成特定识别信息，转交发送函数，发送给服务器
                 '''
+                # ['N', timestamp, current_trace]
                 now_time = timeStamp()
-                traces_tobe_send = ['N', now_time]
-                archive = 'N'   # 该字段判断测试是否归档
-                online = 'Y'    # 该字段判断SSD是否在线
-                for card_name in add_card:
-                    for trace in current_trace:
-                        if card_name == trace[0]:
-                            trace_tobe_send = [trace, machine, archive, online]
-                            traces_tobe_send.append(trace_tobe_send)
-                            
-                return traces_tobe_send
-            new_card = process_card_add(add_card)
+                new_traces = []
+                for sn in add_card:
+                    for trace in current_traces:
+                        if trace['SN'] == sn:
+                            new_trace = ['N', now_time, trace]
+                            new_traces.append(new_trace)
+                send_to_server = send_info(new_traces)  # 发送给服务器
+                return
+            process_card_add(add_card)
 
+#-------- 处理卡弹出/丢卡动作 ------
         if remove_card:
-            
             def process_card_remove(remove_card):
                 '''
                 1.构建新trace
@@ -261,36 +245,83 @@ def main():
                 3.如果上次为idle，则判断本次卡移除动作为正常弹出，报卡弹出给server端, 归档trace
                 4.如果上次为running，则判断本次卡移出动作为丢卡，走丢卡流程， 归档trace
                 '''
+                # ['R', timestamp, sn, err]
                 now_time = timeStamp()
-                traces_tobe_send = ['R', now_time]
-                archive = 'Y'
-                online = 'N'
-                for card_name in remove_card:
-                    for trace in old_trace:
-                        if card_name == trace[0]:
-                            if trace[3]:
-                                trace[4] = 'Lost'
-                            else:
-                                trace[4] = 'Remove'
-                            trace_tobe_send = [trace, machine, archive, online]
-                            traces_tobe_send.append(trace_tobe_send)
-                return traces_tobe_send
-            remove_card = process_card_remove(remove_card)
-        # 其次判断不存在丢卡及新添加卡的测试状态
+                for sn in remove_card:
+                    for old_trace in old_traces:            
+                
+            #     traces_tobe_send = ['R', now_time]
+            #     archive = 'Y'
+            #     online = 'N'
+            #     for card_name in remove_card:
+            #         for trace in old_traces:
+            #             if card_name == trace[0]:
+            #                 if trace[3]:
+            #                     trace[4] = 'Lost'
+            #                 else:
+            #                     trace[4] = 'Remove'
+            #                 trace_tobe_send = [trace, machine, archive, online]
+            #                 traces_tobe_send.append(trace_tobe_send)
+            #     return traces_tobe_send
+            # remove_card = process_card_remove(remove_card)
+#-------- 处理卡信息变动动作 ------
         def process_normal_mode(normal_card):
             '''
-            卡的数量与之前状态一致，则执行该流程
-            1.检查脚本是否与之前一致
-            2.如果一致，则发送heartbeat信号
-            3.如果不一致，则记录状态变化，生成时间戳，发送给server端
             '''
+            current_time = timeStamp()
+            old_trace = []
+            current_trace = []
+            update_info = [current_time]
+
             if not normal_card:
                 return
             for card_name in normal_card:
+                for trace in current_traces:
+                    if card_name == trace[0]:
+                        current_trace = trace
+                for trace in old_traces:
+                    if card_name == trace[0]:
+                        old_trace = trace
+                # 重构需要比对的变量
 
 
+#-------- 检测卡关键信息变动 --------#
+                # if current_trace[1] != old_trace[1]:
+                #     def process_firmware_change(current_vers, old_vers): # ['v', 'firmware-change:....', 'format-change:...']
+                #         detect = ['v']
+                        
+                #         if not current_vers or not old_vers:
+                #             return 1
+                #         c_fw, c_fwld, c_fmt, c_uefi_driver = current_vers
+                #         o_fw, o_fwld, o_fmt, o_uefi_driver = old_vers
+                        
+                #         if c_fw != o_fw:
+                #             info = 'firmware-change: {0} ==> {1}'.format(o_fw, c_fw)
+                #             detect.append(info)
+                #         if c_fwld != o_fwld:
+                #             info = 'fwld-change: {0} ==> {1}'.format(o_fwld, c_fwld)
+                #             detect.append(info)
+                #         if c_fmt != o_fmt:
+                #             info = 'format-change: {0} ==> {1}'.format(o_fmt, c_fmt)
+                #             detect.append(info)
+                #         if c_uefi_driver != o_uefi_driver:
+                #             info = 'uefi_driver-change: {0} ==> {1}'.format(o_uefi_driver, c_uefi_driver)
+                #             detect.append(info)
 
+                #         return detect
+                #     current_vers = current_trace[1]
+                #     old_vers = old_trace[1]
+                #     version_change = process_firmware_change(current_vers, old_vers)               
 
+                    
+    
+    
+    
+    
+    
+    # def env_chcek():
+    #     install dmidecode newer than v2.8
+    
     while True:
         
         current_trace = genarate_current_trace()
