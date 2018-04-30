@@ -245,44 +245,41 @@ def main():
                 3.如果上次为idle，则判断本次卡移除动作为正常弹出，报卡弹出给server端, 归档trace
                 4.如果上次为running，则判断本次卡移出动作为丢卡，走丢卡流程， 归档trace
                 '''
-                # ['R', timestamp, sn, err]
+                # ['R', timestamp, sn, err] 
                 now_time = timeStamp()
+                new_traces = []
                 for sn in remove_card:
                     for old_trace in old_traces:            
-                
-            #     traces_tobe_send = ['R', now_time]
-            #     archive = 'Y'
-            #     online = 'N'
-            #     for card_name in remove_card:
-            #         for trace in old_traces:
-            #             if card_name == trace[0]:
-            #                 if trace[3]:
-            #                     trace[4] = 'Lost'
-            #                 else:
-            #                     trace[4] = 'Remove'
-            #                 trace_tobe_send = [trace, machine, archive, online]
-            #                 traces_tobe_send.append(trace_tobe_send)
-            #     return traces_tobe_send
-            # remove_card = process_card_remove(remove_card)
+                        if old_trace['SN'] == sn:
+                            if old_trace['script'] == '':
+                                err = 0
+                            else:
+                                err = 1
+                        new_trace = ['R', now_time, sn, err]
+                        new_traces.append(new_trace)
+                send_to_server = send_info(new_traces)  # 发送给服务器
+                return
+            process_card_remove(remove_card)
+            
 #-------- 处理卡信息变动动作 ------
         def process_normal_mode(normal_card):
             '''
             '''
-            current_time = timeStamp()
-            old_trace = []
-            current_trace = []
-            update_info = [current_time]
+            # current_time = timeStamp()
+            # old_trace = []
+            # current_trace = []
+            # update_info = [current_time]
 
-            if not normal_card:
-                return
-            for card_name in normal_card:
-                for trace in current_traces:
-                    if card_name == trace[0]:
-                        current_trace = trace
-                for trace in old_traces:
-                    if card_name == trace[0]:
-                        old_trace = trace
-                # 重构需要比对的变量
+            # if not normal_card:
+            #     return
+            # for card_name in normal_card:
+            #     for trace in current_traces:
+            #         if card_name == trace[0]:
+            #             current_trace = trace
+            #     for trace in old_traces:
+            #         if card_name == trace[0]:
+            #             old_trace = trace
+            #     # 重构需要比对的变量
 
 
 #-------- 检测卡关键信息变动 --------#
