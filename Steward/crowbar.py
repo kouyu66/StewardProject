@@ -332,10 +332,84 @@ def main():
             process_card_add(add_card)
 #-------- 处理卡弹出/丢卡动作 ------
         if remove_card:
+<<<<<<< HEAD
             process_card_remove(remove_card)
 #-------- 处理卡信息变动动作 ------
         process_normal_mode(normal_cards_sn)
         return
+=======
+            def process_card_remove(remove_card):
+                '''
+                1.构建新trace
+                2.检查上次状态是否为idle
+                3.如果上次为idle，则判断本次卡移除动作为正常弹出，报卡弹出给server端, 归档trace
+                4.如果上次为running，则判断本次卡移出动作为丢卡，走丢卡流程， 归档trace
+                '''
+                # ['R', timestamp, sn, err] 
+                now_time = timeStamp()
+                new_traces = []
+                for sn in remove_card:
+                    for old_trace in old_traces:            
+                        if old_trace['SN'] == sn:
+                            if old_trace['script'] == '':
+                                err = 0
+                            else:
+                                err = 1
+                        new_trace = ['R', now_time, sn, err]
+                        new_traces.append(new_trace)
+                send_to_server = send_info(new_traces)  # 发送给服务器
+                return
+            process_card_remove(remove_card)
+            
+#-------- 处理卡信息变动动作 ------
+        def process_normal_mode(normal_card):
+            '''
+            '''
+            # current_time = timeStamp()
+            # old_trace = []
+            # current_trace = []
+            # update_info = [current_time]
+
+            # if not normal_card:
+            #     return
+            # for card_name in normal_card:
+            #     for trace in current_traces:
+            #         if card_name == trace[0]:
+            #             current_trace = trace
+            #     for trace in old_traces:
+            #         if card_name == trace[0]:
+            #             old_trace = trace
+            #     # 重构需要比对的变量
+
+
+#-------- 检测卡关键信息变动 --------#
+                # if current_trace[1] != old_trace[1]:
+                #     def process_firmware_change(current_vers, old_vers): # ['v', 'firmware-change:....', 'format-change:...']
+                #         detect = ['v']
+                        
+                #         if not current_vers or not old_vers:
+                #             return 1
+                #         c_fw, c_fwld, c_fmt, c_uefi_driver = current_vers
+                #         o_fw, o_fwld, o_fmt, o_uefi_driver = old_vers
+                        
+                #         if c_fw != o_fw:
+                #             info = 'firmware-change: {0} ==> {1}'.format(o_fw, c_fw)
+                #             detect.append(info)
+                #         if c_fwld != o_fwld:
+                #             info = 'fwld-change: {0} ==> {1}'.format(o_fwld, c_fwld)
+                #             detect.append(info)
+                #         if c_fmt != o_fmt:
+                #             info = 'format-change: {0} ==> {1}'.format(o_fmt, c_fmt)
+                #             detect.append(info)
+                #         if c_uefi_driver != o_uefi_driver:
+                #             info = 'uefi_driver-change: {0} ==> {1}'.format(o_uefi_driver, c_uefi_driver)
+                #             detect.append(info)
+
+                #         return detect
+                #     current_vers = current_trace[1]
+                #     old_vers = old_trace[1]
+                #     version_change = process_firmware_change(current_vers, old_vers)               
+>>>>>>> 54190ebcb0c0ea6261e97956afed1d3934263a59
 
     # def env_chcek():
     #     install dmidecode newer than v2.8
