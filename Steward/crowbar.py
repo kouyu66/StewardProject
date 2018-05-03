@@ -6,6 +6,7 @@ import time
 import datetime
 import json
 import socket
+import sys
 from collections import Counter
 
 '''
@@ -20,7 +21,7 @@ def list_to_dict(list_info, sep=':'):   # 输入列表， 以分隔符分隔， 
         if line.count(sep) != 1:
             continue
         seprate_line = re.split(sep, line)
-        seprate_line = [x.strip('/n').strip() for x in seprate_line]
+        seprate_line = [x.replace('\t','').replace('\n','').replace(' ','') for x in seprate_line]
         list_temp.append(seprate_line)
     
     dict_info = dict(list_temp)
@@ -109,10 +110,12 @@ def get_machine_status():   # 获取当前测试机信息，[厂商, 型号, cpu
     machine_info = os.popen(get_manufacturer_command).readlines()
     machine_info = [x.strip('\n').strip() for x in machine_info]
     manufacturer, machine_type = machine_info
+    
     # 获取服务器CPU信息
     cpu_info = os.popen(get_cpu_type_command).readlines()
     cpu_info = [x.strip('\n').strip() for x in cpu_info]
     cpus = ' '.join(['{0} * {1}'.format(str(x), str(y)) for x, y in Counter(cpu_info).items()])
+    
     # 获取服务器内存信息
     mem_count = os.popen(get_mem_count_command).readlines()
     mem_count  = [x.strip('\n').strip() for x in mem_count]
@@ -120,20 +123,22 @@ def get_machine_status():   # 获取当前测试机信息，[厂商, 型号, cpu
     mem_type = [x.strip('\n').strip() for x in mem_type][0]
     mem_dict = Counter(mem_count)
     mems = ' '.join(['{0} * {1} {2}'.format(str(x), str(y), mem_type) for x, y in mem_dict.items()])
+    
     # 获取dera nvme ssd字符设备信息
     node_info = os.popen(get_nvme_node_command).readlines()
-    node_info = [x.strip('\n').strip() for x in node_info]
+    node_info = [x.replace('\n','').replace(' ','').replace('\t','') for x in node_info if node_info]
     for node in node_info:
-        identify_info = os.popen("./nvme id-ctrl {0} | grep ^vid | cut -d ':' -f 2".format(node)).readlines()
-        identify_info = [x.strip('\n').strip() for x in identify_info][0]
-        if identify_info != '0x1d78':   # 排除非dera ssd
+        identify_info = os.popen("./nvme id-ctrl {0} | grep ^vid".format(node)).readlines()
+        if identify_info and '0x1d78' not in identify_info[0]:   # 排除非dera ssd
             node_info.remove(node)
+
     # 获取服务器开机时长信息
     uptime_seconds = os.popen(get_uptime_command).readlines()[0]
     uptime_seconds = float(uptime_seconds)
     m, s = divmod(uptime_seconds, 60)
     h, m = divmod(m, 60)
     uptime = "%02d:%02d:%02d" % (h, m, s)
+    
     # 获取服务器当前网络状态信息
     local = '10.0.4.1' # 本地网关
     t_disk = '10.0.1.206' # T盘所在服务器的IP地址
@@ -151,14 +156,10 @@ def get_machine_status():   # 获取当前测试机信息，[厂商, 型号, cpu
                 pass
     net_status = ''.join(net_status)
 
-    return [manufacturer, machine_type, cpus, mems, node_info, uptime, net_status]
+    return [manufacturer, machine_type, cpus, mems, node_info, net_status]  # 临时移除uptime，便于比对
 
 
 def main():
-    
-    # def env_chcek():
-        # install dmidecode newer than v2.8
-        
 
     def timeStamp():
         now_time = datetime.datetime.now()
@@ -207,6 +208,15 @@ def main():
             add_machine_and_script = dict([['machine', machine], ['script', running_script]])
             trace = nvme.info
             trace.update(add_machine_and_script)
+            if len(trace) > 2:
+                del trace['host_write_commands']
+                del trace['host_read_commands']
+                del trace['data_units_written']
+                del trace['data_units_read']
+                del trace['current_power']
+                del trace['current_pcie_volt']
+                del trace['cap_voltage']
+                del trace['controller_busy_time']
             traces.append(trace)
 
         return traces
@@ -229,26 +239,48 @@ def main():
         return
 
     # -------- 以下为主要逻辑区域 --------
+    
     current_traces = genarate_current_trace()
     old_traces = read_old_trace()
 
 
     def core_logic(current_traces, old_traces):
         
-        def process_card_add(add_card):
+        def new_check(new_trace):
+            '''对首次识别到的trace，筛选关键信息'''
+            key_info = {
+            'info_type' :'new_trace', # 对于新卡，添加该键值以方便服务器端识别信息类型，做出相应处理    
+            'machine':new_trace['machine'],
+            'script':new_trace['script'],
+            'SN':new_trace['SN'],
+            'Model':new_trace['Model'],
+            'Capacity': new_trace['Capacity'],
+            'FwRev': new_trace['FwRev'],
+            'fw_loader_version': new_trace['fw_loader_version'],
+            'uefi_driver_version': new_trace['uefi_driver_version'],
+            'device_status': new_trace['device_status'], # Normal
+            'Format': new_trace['Format'], 
+            'pcispeed': new_trace['pcispeed'],   # 8GT/s x4
+            'boot': new_trace['boot']
+            }
+            return key_info
+        
+        def process_card_add(add_cards_sn):
             '''
             生成特定识别信息，转交发送函数，发送给服务器
             '''
             # ['N', timestamp, current_trace]
             now_time = timeStamp()
             new_traces = []
-            for sn in add_card:
+            for sn in add_cards_sn:
                 for trace in current_traces:
                     if trace['SN'] == sn:
-                        new_trace = ['N', now_time, trace]
-                        new_traces.append(new_trace)
-            json_info = json.dumps(new_traces)
-            send_info(json_info)  # 发送给服务器
+                        key_infomation = new_check(trace) # 筛选关键信息进行发送
+                        json_info = json.dumps(key_infomation)
+                        send_info(json_info)    # 发送给服务器
+            
+            # json_info = json.dumps(new_traces)
+            # send_info(json_info)  # 发送给服务器
 
             return
 
@@ -260,160 +292,79 @@ def main():
             # ['R', timestamp, sn, err] 
             now_time = timeStamp()
             new_traces = []
-            for sn in remove_card:
+            for sn in remove_cards_sn:
                 for old_trace in old_traces:            
                     if old_trace['SN'] == sn:
                         if old_trace['script'] == '':
                             err = 0
                         else:
                             err = 1
-                    new_trace = ['R', now_time, sn, err]
-                    new_traces.append(new_trace)
-            json_info = json.dumps(new_traces)
-            send_to_server = send_info(json_info)  # 发送给服务器
+                        key_info = {
+                        'info_type':'card_remove',
+                        'now_time':now_time,
+                        'SN':sn,
+                        'err':err                    
+                        }
+                        json_info = json.dumps(key_info)
+                        send_info(json_info)
             return
 
-        def process_normal_mode(normal_cards_sn):
+        def process_normal_mode(normal_cards_sn): 
             '''
             即不存在新插入卡，也不存在移除卡的情况下，执行该函数，
             该函数比较相同sn的ssd在两次不同时间的扫描下，各项信息是否一致，并通知给主控服务器
             '''
             now_time = timeStamp()
-            new_traces = []
 
             for sn in normal_cards_sn:
                 single_card_info = []
                 
                 current_trace = [trace for trace in current_traces if trace['SN'] == sn][0]
                 old_trace = [trace for trace in old_traces if trace['SN'] == sn][0]
-
+                key_info = {}
                 for key in current_trace:
                     if key in old_trace:
                         if current_trace[key] != old_trace[key]:
-                           single_info = [key, old_trace[key], current_trace[key]]
-                           single_card_info.append(single_info)
+                            # print(key, current_trace[key])
+                            key_info[key] = current_trace[key]
                         else:
                             continue
-                if single_card_info:
-                    new_traces.append(single_card_info)
-            if new_traces:
-                json_info = json.dumps(new_traces)
-                send_info(json_info) 
-                    
-            #     for key in current_trace:
-            #         if key in old_trace:
-            #             if current_trace[key] != old_trace[key]:
-            #                info = [key, old_trace[key], current_trace[key]]#'{0}: {1} ==> {2}\n'.format(key, old_trace[key], current_trace[key])
-            #             else:
-            #                 info = []
-            #         else:
-            #             info = [key, current_trace[key]]#'{0}: ? ==> {1}\n'.format(key, current_trace[key])
-            #         if info:
-            #             change_info.append(info)           
-            #     if change_info:        
-            #         new_trace = ['C', now_time, sn, change_info]
-            #         new_traces.append(new_trace)
-            # if new_traces:
-            #     json_info = json.dumps(new_traces)
-            #     send_to_server = send_info(json_info)  # 发送给服务器
-            # else:
-            #     pass    # 后期可添加心跳函数
-
+                if key_info:
+                    head_info = {
+                    'info_type':'normal_update',
+                    'now_time':now_time
+                    }
+                    key_info.update(head_info)
+                else:
+                    key_info = {
+                    'info_type':'heartbeat',
+                    'now_time':now_time
+                    }
+                json_info = json.dumps(key_info)
+                send_info(json_info)
+                    # pass    # send heartbeat.
             return
 
      
         current_cards_sn = [trace['SN'] for trace in current_traces  if current_traces]  # 获取当前trace中ssd的names部分
         last_cards_sn = [trace['SN'] for trace in old_traces if old_traces] # 获取上次扫描中ssd的names部分
-        add_card, remove_card = list_compare(current_cards_sn, last_cards_sn) # 判断是否有丢卡，或新识别卡的情况发生
-        normal_cards_sn = [x for x in current_cards_sn if x not in add_card] # 既不是新添加的卡，也不包含弹出的卡
+        add_cards_sn = []
+        remove_cards_sn = []
+        normal_cards_sn = []
+        add_cards_sn,remove_cards_sn = list_compare(current_cards_sn, last_cards_sn) # 判断是否有丢卡，或新识别卡的情况发生
+        normal_cards_sn = [x for x in current_cards_sn if x not in add_cards_sn] # 既不是新添加的卡，也不包含弹出的卡
 
 #-------- 处理新卡插入动作 --------
-        if add_card:    # 处理新识别卡，这种情况
-            process_card_add(add_card)
+        if add_cards_sn:
+            process_card_add(add_cards_sn)
 #-------- 处理卡弹出/丢卡动作 ------
-        if remove_card:
-<<<<<<< HEAD
+        if remove_cards_sn:
             process_card_remove(remove_card)
 #-------- 处理卡信息变动动作 ------
         process_normal_mode(normal_cards_sn)
+        
         return
-=======
-            def process_card_remove(remove_card):
-                '''
-                1.构建新trace
-                2.检查上次状态是否为idle
-                3.如果上次为idle，则判断本次卡移除动作为正常弹出，报卡弹出给server端, 归档trace
-                4.如果上次为running，则判断本次卡移出动作为丢卡，走丢卡流程， 归档trace
-                '''
-                # ['R', timestamp, sn, err] 
-                now_time = timeStamp()
-                new_traces = []
-                for sn in remove_card:
-                    for old_trace in old_traces:            
-                        if old_trace['SN'] == sn:
-                            if old_trace['script'] == '':
-                                err = 0
-                            else:
-                                err = 1
-                        new_trace = ['R', now_time, sn, err]
-                        new_traces.append(new_trace)
-                send_to_server = send_info(new_traces)  # 发送给服务器
-                return
-            process_card_remove(remove_card)
-            
-#-------- 处理卡信息变动动作 ------
-        def process_normal_mode(normal_card):
-            '''
-            '''
-            # current_time = timeStamp()
-            # old_trace = []
-            # current_trace = []
-            # update_info = [current_time]
 
-            # if not normal_card:
-            #     return
-            # for card_name in normal_card:
-            #     for trace in current_traces:
-            #         if card_name == trace[0]:
-            #             current_trace = trace
-            #     for trace in old_traces:
-            #         if card_name == trace[0]:
-            #             old_trace = trace
-            #     # 重构需要比对的变量
-
-
-#-------- 检测卡关键信息变动 --------#
-                # if current_trace[1] != old_trace[1]:
-                #     def process_firmware_change(current_vers, old_vers): # ['v', 'firmware-change:....', 'format-change:...']
-                #         detect = ['v']
-                        
-                #         if not current_vers or not old_vers:
-                #             return 1
-                #         c_fw, c_fwld, c_fmt, c_uefi_driver = current_vers
-                #         o_fw, o_fwld, o_fmt, o_uefi_driver = old_vers
-                        
-                #         if c_fw != o_fw:
-                #             info = 'firmware-change: {0} ==> {1}'.format(o_fw, c_fw)
-                #             detect.append(info)
-                #         if c_fwld != o_fwld:
-                #             info = 'fwld-change: {0} ==> {1}'.format(o_fwld, c_fwld)
-                #             detect.append(info)
-                #         if c_fmt != o_fmt:
-                #             info = 'format-change: {0} ==> {1}'.format(o_fmt, c_fmt)
-                #             detect.append(info)
-                #         if c_uefi_driver != o_uefi_driver:
-                #             info = 'uefi_driver-change: {0} ==> {1}'.format(o_uefi_driver, c_uefi_driver)
-                #             detect.append(info)
-
-                #         return detect
-                #     current_vers = current_trace[1]
-                #     old_vers = old_trace[1]
-                #     version_change = process_firmware_change(current_vers, old_vers)               
->>>>>>> 54190ebcb0c0ea6261e97956afed1d3934263a59
-
-    # def env_chcek():
-    #     install dmidecode newer than v2.8
-    
     while True:
         
         current_trace = genarate_current_trace()
@@ -422,16 +373,5 @@ def main():
         with open('last_trace.json', 'w') as last_trace_obj:
             json.dump(current_trace, last_trace_obj)
             last_trace_obj.close()
-        time.sleep(10)
+        time.sleep(2)
 main()
-        # 接下来是比对逻辑, 检查SSD信息变动
-
-
-        
-        
-        # 将数据存储到本地文件
-        # with open('last_scan.pickle', 'wb') as last_scan:
-        #     pickle.dump(traces, last_scan)
-        # time.sleep(2)
-
-
