@@ -3,6 +3,7 @@
 import json
 import socket
 import threading
+import pandas
 
 def dataRecv(sock, addr):
     '''循环等待客户端发出数据，如果发送空数据则断开链接，发送非空数据则交由 infomationExchange 函数处理'''

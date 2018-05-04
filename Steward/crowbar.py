@@ -75,7 +75,7 @@ def get_running_script():   # 获取当前正在运行的脚本及参数，pid. 
     '''获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, pid]]'''
     commands = []
     # 使用ps命令查看当前进程信息是否包含脚本名
-    get_python3_script_fullname_cmd =  "ps -elf | grep -E 'HotPlug_NVMe_suite\.py|ts_.*\.py.*|runvdb.py.*'|grep -v grep"
+    get_python3_script_fullname_cmd =  "ps -elf | grep -E 'HotPlug_NVMe_suite\.py|ts_.*\.py |runvdb.py '|grep -v grep"
     running_script_full_name = os.popen(get_python3_script_fullname_cmd).readlines()
     # 对返回的进程信息逐条进行拆分，拆分为命令本身和参数
     for cmd in running_script_full_name:
@@ -208,14 +208,21 @@ def main():
             add_machine_and_script = dict([['machine', machine], ['script', running_script]])
             trace = nvme.info
             trace.update(add_machine_and_script)
-            if len(trace) > 2:
+            if 'host_write_commands' in trace:
                 del trace['host_write_commands']
+            if 'host_read_commands' in trace:
                 del trace['host_read_commands']
+            if 'data_units_written' in trace:
                 del trace['data_units_written']
+            if 'data_units_read' in trace:
                 del trace['data_units_read']
+            if 'current_power' in trace:
                 del trace['current_power']
+            if 'current_pcie_volt' in trace:
                 del trace['current_pcie_volt']
+            if 'cap_voltage' in trace:
                 del trace['cap_voltage']
+            if 'controller_busy_time' in trace:
                 del trace['controller_busy_time']
             traces.append(trace)
 
@@ -240,8 +247,8 @@ def main():
 
     # -------- 以下为主要逻辑区域 --------
     
-    current_traces = genarate_current_trace()
-    old_traces = read_old_trace()
+    # current_traces = genarate_current_trace()
+    # old_traces = read_old_trace()
 
 
     def core_logic(current_traces, old_traces):
@@ -354,13 +361,13 @@ def main():
         add_cards_sn,remove_cards_sn = list_compare(current_cards_sn, last_cards_sn) # 判断是否有丢卡，或新识别卡的情况发生
         normal_cards_sn = [x for x in current_cards_sn if x not in add_cards_sn] # 既不是新添加的卡，也不包含弹出的卡
 
-#-------- 处理新卡插入动作 --------
+        #-------- 处理新卡插入动作 --------
         if add_cards_sn:
             process_card_add(add_cards_sn)
-#-------- 处理卡弹出/丢卡动作 ------
+        #-------- 处理卡弹出/丢卡动作 ------
         if remove_cards_sn:
             process_card_remove(remove_card)
-#-------- 处理卡信息变动动作 ------
+        #-------- 处理卡信息变动动作 ------
         process_normal_mode(normal_cards_sn)
         
         return
