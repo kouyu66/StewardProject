@@ -111,6 +111,29 @@ def main():
         
         return mgc_error_info
 
+    def get_mgcError_by_die():  # 逐个die获取mgc错误统计信息 
+        
+        mgc_num_range = ['#419d', '#519d', '#b19d', '#c19d']
+        rg_num_range = range(0,2)
+        die_num_range = range(0,16)
+        get_die_err_cmd = './nvme dera get-log /dev/nvme0'
+        
+
+        for mgc in mgc_num_range:
+            for rg in rg_num_range:
+                for die in die_num_range:
+                    die_ready_cmd = "./nvme dera uart-in -p '{0} 1 {1} {2}' /dev/nvme0".format(mgc,rg,die)
+                    os.popen(die_ready_cmd)
+                    time.sleep(0.05) # wait for card info ready.
+                    get_current_die_err_info = os.popen(get_die_err_cmd).readlines()
+                    # [NMPa1 000d 02:30:12.445] ...RG=1,Die=12,ERRBit=070,FrameCnt=00000000000000000000,Rate=00000000
+                    
+                    for line in get_current_die_err_info:
+                        split_line = [x for x in re.split(r'[.=,>]', line) if x]    # 目标行应包含12个元素
+                        if len(split_line) == 12 and 
+
+
+
     def ssd_format(nvme_dev='/dev/nvme0'):    # 向SSD发送format命令并等待完成
         return_code = os.popen('./nvme format {0}'.format(nvme_dev)).readlines()
         if 'Success' in return_code[0]:

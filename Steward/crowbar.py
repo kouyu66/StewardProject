@@ -341,8 +341,6 @@ def main():
             now_time = timeStamp()
 
             for sn in normal_cards_sn:
-                single_card_info = []
-
                 current_trace = [
                     trace for trace in current_traces if trace['SN'] == sn
                 ][0]
@@ -361,10 +359,11 @@ def main():
                     head_info = {
                         'info_type': 'normal_update',
                         'now_time': now_time
+                        'SN':sn
                     }
                     key_info.update(head_info)
                 else:
-                    key_info = {'info_type': 'heartbeat', 'now_time': now_time}
+                    key_info = {'info_type': 'heartbeat', 'now_time': now_time, 'SN': sn}
                 json_info = json.dumps(key_info)
                 send_info(json_info)
                 # pass    # send heartbeat.
