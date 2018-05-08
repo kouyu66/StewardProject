@@ -255,7 +255,7 @@ def main():
             old_traces = []
         return old_traces
 
-    def send_info(data, server_ip='10.0.4.68'):
+    def send_info(data, server_ip='10.0.4.133'):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((server_ip, 6001))
         s.send((data).encode('utf-8'))  # 发送客户端有效数据
@@ -358,8 +358,8 @@ def main():
                 if key_info:
                     head_info = {
                         'info_type': 'normal_update',
-                        'now_time': now_time
-                        'SN':sn
+                        'now_time': now_time,
+                        'SN': sn
                     }
                     key_info.update(head_info)
                 else:

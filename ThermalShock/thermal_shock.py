@@ -114,25 +114,45 @@ def main():
     def get_mgcError_by_die():  # 逐个die获取mgc错误统计信息 
         
         mgc_num_range = ['#419d', '#519d', '#b19d', '#c19d']
-        rg_num_range = range(0,2)
-        die_num_range = range(0,16)
+        rg_num_range = ['0','1']
+        die_num_range = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
         get_die_err_cmd = './nvme dera get-log /dev/nvme0'
-        
+        total_info = []
 
         for mgc in mgc_num_range:
             for rg in rg_num_range:
                 for die in die_num_range:
+                    
                     die_ready_cmd = "./nvme dera uart-in -p '{0} 1 {1} {2}' /dev/nvme0".format(mgc,rg,die)
                     os.popen(die_ready_cmd)
                     time.sleep(0.05) # wait for card info ready.
                     get_current_die_err_info = os.popen(get_die_err_cmd).readlines()
                     # [NMPa1 000d 02:30:12.445] ...RG=1,Die=12,ERRBit=070,FrameCnt=00000000000000000000,Rate=00000000
-                    
+                    line_info = []
+                    die_info = '{0},{1},{2}'.format(str(mgc_num_range.index(mgc)), rg, die)
+                    line_info.append(die_info)
+
                     for line in get_current_die_err_info:
+                        
                         split_line = [x for x in re.split(r'[.=,>]', line) if x]    # 目标行应包含12个元素
-                        if len(split_line) == 12 and 
-
-
+                        if len(split_line) == 12 and split_line[6] == 'ERRBit' and split_line[8] == 'FrameCnt' and split_line[10] == 'Rate':
+                            Errbit = split_line[7]
+                            FrameCnt = str(int(split_line[9]))  # 去掉framcnt计数多余显示的0
+                            Rate = str(int(split_line[11]))     # 去掉rate计数多余显示的0
+                            
+                            bit_info = '{0}_{1}_{2}'.format(Errbit, FrameCnt, Rate)    
+                            line_info.append(bit_info)
+                        elif len(split_line) == 12 and split_line[6] == 'ERRUNC' and split_line[8] == 'FrameCnt' and split_line[10] == 'Rate':
+                            Errbit = '>72'
+                            FrameCnt = str(int(split_line[9]))  # 去掉framcnt计数多余显示的0
+                            Rate = str(int(split_line[11]))     # 去掉rate计数多余显示的0
+                            
+                            bit_info = '{0}_{1}_{2}'.format(Errbit, FrameCnt, Rate)    
+                            line_info.append(bit_info)
+                        else:
+                            pass
+                    total_info.append(line_info)
+        return total_info
 
     def ssd_format(nvme_dev='/dev/nvme0'):    # 向SSD发送format命令并等待完成
         return_code = os.popen('./nvme format {0}'.format(nvme_dev)).readlines()
@@ -221,6 +241,14 @@ def main():
             writer.writerows(data)
             csv_file.close()
         return
+    
+    def list_to_csv_by_die(list_name, file_name):
+        with open(filename,'a',newline='') as csv_file:
+            writer = csv.writer(csv_file)
+
+            data = list_name
+            writer.writerows(list_name)
+            csv_file.close()        
 
     def runIO(mode='r'): # 调用iovt对SSD做io，只针对3.2T SSD，随机在数据格式为0，1，5，LA中选择一种后续进行传参处理
         data_patten_pool = ['0','1','5','LA']
@@ -238,14 +266,14 @@ def main():
     
     
     """------ Test Start ------"""
-    # temps = temp_sets()
-    temps = [[-10,55],[-20,55]]
+    temps = temp_sets()
+    # temps = [[-10,55],[-20,55]]
     run_time_log('[Start] temp sets are {0}'.format(temps))
 
     for temp_set in temps:
         write_temp = temp_set[0]
         read_temp = temp_set[1]
-        filename = '{0}_{1}.csv'.format(write_temp, read_temp)
+        filename = 'temp_shock_{0}_{1}_.csv'.format(write_temp, read_temp)
         
         """------ Step 0 check env temp ------"""
         print('Test Start. current temp set is {0} | {1}'.format(write_temp,read_temp))
@@ -303,13 +331,13 @@ def main():
         
         """------ Step 6 get mgc error info ------"""
         print('Step6 start to get mgc error info...')
-        list_name = get_mgcError()
+        list_name = get_mgcError_by_die()
         print('Step6 complete.')
         run_time_log('[Run] mgc info dump success, start to generate csv file...')
         
         """------ Step 7 process mgc error info ------"""
         print('Step7 process mgc error info')        
-        list_to_csv(list_name, filename)
+        list_to_csv_by_die(list_name, filename)
         print('Step7 complete.')
         run_time_log('[Run] creat csv file successfully. ')
         run_time_log('[Done] {0} | {1} test complete'.format(write_temp,read_temp))
