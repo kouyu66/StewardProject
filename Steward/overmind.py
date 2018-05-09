@@ -44,20 +44,35 @@ def infomationExchange(data, addr):
     def processUpdate(decode_data):
         # 刷新计时器
         # 如果变动值属于关键属性（包含在new_trace当中），则除了打印log之外，还需要更改对应的关键值
+        global main_info
+        global timmer_pool
         
         if not decode_data.get('info_type') == 'normal_update':
-            return
-        timmer_pool[decode_data['SN']] = time.time()
-        line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()
-        if line_number_list:
-            line_number = line_number_list[0]
-            for key in decode_data.keys():
-                if key in main_info.columns:
-                    old_info = main_info.loc[line_number, key]
-                    main_info.loc[line_number, key] = decode_data.get(key)
-
-                info = '[Update] {0} {1} {2} {3} {4} ==> {5}'.format(decode_data.get('now_time'), addr[0], decode_data.get('SN'), key, old_info, decode_data.get(key))
-                notes.append(info)
+            return      # 如果信息类型错误，说明信息有误，不作处理以免脚本报错
+        decode_data.pop('info_type')
+        
+        line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()    # 定位统计表格中该trace的行号
+        if line_number_list:                                                                                        # 定位统计表格中该trace的行号
+            line_number = line_number_list[0]                                                                       # 定位统计表格中该trace的行号
+        else:
+            return      # 如果统计表格中不包含数据，则信息有误，不作处理
+        
+        sn = decode_data.pop('SN')
+        test_machine_time = decode_data.pop('now_time')
+        
+        timmer_pool[sn] = time.time()    # 刷新计时器时间
+        
+        
+        for key in decode_data.keys():  # 对所有变更信息做如下处理
+            try:
+                old_info, current_info = decode_data.get(key)   # 将变更数据解压到两个变量
+                if key in main_info.columns:    # 判断关键信息是否出现变更
+                # old_info = main_info.loc[line_number, key]                                                      # 如果关键信息变更，则读取统计表格中的旧数据
+                    main_info.loc[line_number, key] = decode_data.get(key)[1]   # 将新数据写入统计表格                                          
+                info = '[Update] {0} {1} {2} {3} {4} ==> {5}'.format(test_machine_time, addr[0], sn, key, old_info, current_info)  # 生成log信息
+                notes.append(info)  
+            except ValueError as e:
+                print(addr[0], decode_data.get(key))
 
     def processCardRemove(decode_data):
         # 寻找trace的编号
@@ -84,22 +99,25 @@ def infomationExchange(data, addr):
             return
         
         global main_info
+        global now_time
+
         decode_data['IP'] = addr[0]
         decode_data['Online'] = 'online'
         decode_data['Archive'] = 'no'
         decode_data['Err'] = 'no'
         timmer_pool[decode_data['SN']] = time.time()    # 将当前时间以sn为键值，记录到全局字典中
         decode_data.pop('info_type')
-        # 归档旧数据
        
-        # if not main_info.empty:
-        #     line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()
-        #     if line_number_list:
-        #         line_number = line_number_list[0]
-        #         main_info.loc[line_number, 'Archive'] = 'yes'
+        # 归档旧数据
+        if not main_info.empty:
+            line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()
+            if line_number_list:
+                line_number = line_number_list[0]
+                main_info.loc[line_number, 'Archive'] = 'yes'
+        
         # 添加新数据
         main_info = main_info.append(decode_data, ignore_index=True)
-        info = '[New_Trace] {0} {1} {2}'.format(decode_data('now_time'), addr[0], decode_data['SN'])
+        info = '[New_Trace] {0} {1} {2}'.format(now_time, addr[0], decode_data['SN'])
         notes.append(info)
         return
 
@@ -115,12 +133,11 @@ def infomationExchange(data, addr):
 
         return
     
-   
-    decode_data = json.loads(data.decode('utf-8'))
-    notes = []
-    info_type = dataIdentify(decode_data)
-    dataProcess(info_type)
-    with open('trace.txt', 'a') as log:
+    decode_data = json.loads(data.decode('utf-8'))  # 解压原始数据
+    notes = []  # 清空log信息
+    info_type = dataIdentify(decode_data)   # 识别信息类型
+    dataProcess(info_type)  # 处理对应类型的信息
+    with open('trace.txt', 'a') as log: # 写log
         for line in notes:
             log.write(line + '\n')
         log.close() 

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+#chkconfig:2345 80 90
+#description:crowbar.py
 #coding:utf-8
+
 import os
 import re
 import time
@@ -116,6 +119,7 @@ def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu,
     # 获取服务器厂商，型号信息
     machine_info = os.popen(get_manufacturer_command).readlines()
     machine_info = [x.strip('\n').strip() for x in machine_info]
+    
     manufacturer, machine_type = machine_info
 
     # 获取服务器CPU信息
@@ -163,7 +167,7 @@ def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu,
     net_bucket = [local, t_disk, internet]
     net_status = ['1', '1', '1']
     for ip in net_bucket:
-        ping_command = 'ping {0} -c 1 -w 1'.format(ip)
+        ping_command = 'ping {0} -c 2 -w 2'.format(ip)
         respond = os.popen(ping_command).readlines()
         for line in respond:
             if 'ttl' in line:
@@ -256,6 +260,9 @@ def main():
         return old_traces
 
     def send_info(data, server_ip='10.0.4.133'):
+        net_status = get_machine_status()[-1]
+        if net_status != '000': # 如果网络状态异常，则终止发送信息
+            return
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((server_ip, 6001))
         s.send((data).encode('utf-8'))  # 发送客户端有效数据
@@ -270,10 +277,11 @@ def main():
     # old_traces = read_old_trace()
 
     def core_logic(current_traces, old_traces):
+        now_time = timeStamp()
         def new_check(new_trace):
             '''对首次识别到的trace，筛选关键信息'''
             key_info = {
-                'info_type': 'new_trace',  # 对于新卡，添加该键值以方便服务器端识别信息类型，做出相应处理    
+                'info_type': 'new_trace', # 对于新卡，添加该键值以方便服务器端识别信息类型，做出相应处理    
                 'machine': new_trace['machine'],
                 'script': new_trace['script'],
                 'SN': new_trace['SN'],
@@ -293,8 +301,6 @@ def main():
             '''
             生成特定识别信息，转交发送函数，发送给服务器
             '''
-            # ['N', timestamp, current_trace]
-            now_time = timeStamp()
             new_traces = []
             for sn in add_cards_sn:
                 for trace in current_traces:
@@ -338,8 +344,6 @@ def main():
             即不存在新插入卡，也不存在移除卡的情况下，执行该函数，
             该函数比较相同sn的ssd在两次不同时间的扫描下，各项信息是否一致，并通知给主控服务器
             '''
-            now_time = timeStamp()
-
             for sn in normal_cards_sn:
                 current_trace = [
                     trace for trace in current_traces if trace['SN'] == sn
@@ -352,7 +356,7 @@ def main():
                     if key in old_trace:
                         if current_trace[key] != old_trace[key]:
                             # print(key, current_trace[key])
-                            key_info[key] = current_trace[key]
+                            key_info[key] = [old_trace[key], current_trace[key]]
                         else:
                             continue
                 if key_info:

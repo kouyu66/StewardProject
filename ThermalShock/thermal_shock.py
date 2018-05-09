@@ -129,7 +129,7 @@ def main():
                     get_current_die_err_info = os.popen(get_die_err_cmd).readlines()
                     # [NMPa1 000d 02:30:12.445] ...RG=1,Die=12,ERRBit=070,FrameCnt=00000000000000000000,Rate=00000000
                     line_info = []
-                    die_info = '{0},{1},{2}'.format(str(mgc_num_range.index(mgc)), rg, die)
+                    die_info = '{0}_{1}_{2}'.format(str(mgc_num_range.index(mgc)), rg, die)
                     line_info.append(die_info)
 
                     for line in get_current_die_err_info:
@@ -165,7 +165,7 @@ def main():
 
     def wait_for_env_temp(temp,offset=1,wait=60): # 等待环境温度到达预定值附近
         temp = int(temp)
-        uppertemp = temp + offset
+        uppertemp = temp + offset + 1
         lowertemp = temp - offset
         desired_range = range(lowertemp, uppertemp)
         current_temp = get_sensor_temp()[0]
@@ -267,6 +267,7 @@ def main():
     
     """------ Test Start ------"""
     temps = temp_sets()
+    temps.remove([55, 55])
     # temps = [[-10,55],[-20,55]]
     run_time_log('[Start] temp sets are {0}'.format(temps))
 
