@@ -15,6 +15,11 @@ from collections import Counter
 ssd测试过程中用到的类信息
 '''
 
+global node_info    # 这两个变量用于判断，不需要发送到主控端，所以单列出来
+global net_status   # 这两个变量用于判断，不需要发送到主控端，所以单列出来
+global uptime   # 友好可读的开机时间显示
+global uptime_seconds   # 浮点数形式的开机时间，可用于计算
+
 
 def list_to_dict(list_info, sep=':'):  # 输入列表， 以分隔符分隔， 输出字典
     '''将包含冒号的长字符串转换为字典格式'''
@@ -108,6 +113,11 @@ def get_running_script():  # 获取当前正在运行的脚本及参数，pid. �
 
 def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]
     '''获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]'''
+    global node_info    # 这两个变量用于判断，不需要发送到主控端，所以单列出来
+    global net_status   # 这两个变量用于判断，不需要发送到主控端，所以单列出来
+    global uptime   # 友好可读的开机时间显示
+    global uptime_seconds   # 浮点数形式的开机时间，可用于计算
+
     # 定义相关命令
     get_manufacturer_command = 'dmidecode -s system-manufacturer && dmidecode -s system-product-name'
     get_cpu_type_command = 'dmidecode -s processor-version'
@@ -177,8 +187,9 @@ def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu,
                 pass
     net_status = ''.join(net_status)
 
-    return [manufacturer, machine_type, cpus, mems, node_info,
-            net_status]  # 临时移除uptime，便于比对
+    host_info = '{0}-{1}-{2}-{3}'.format(manufacturer,machine_type,cpus,mems)
+    
+    return host_info
 
 
 def main():
@@ -202,6 +213,8 @@ def main():
 
     def genarate_current_trace():
         '''获取当前运行的脚本，机器状态，及ssd实例'''
+        global 
+
         traces = []
         scripts = get_running_script()
         machine = get_machine_status()
@@ -401,7 +414,7 @@ def main():
 
         return
 
-    time.sleep(5)   # 每次重新调用脚本，意味着重新启动测试机，由于脚本启动顺序的问题，等待测试脚本运行起来以后再进行监控，5s为经验值
+    time.sleep(10)   # 每次重新调用脚本，意味着重新启动测试机，由于脚本启动顺序的问题，等待测试脚本运行起来以后再进行监控，10s为经验值
 
     while True:
 
@@ -410,7 +423,7 @@ def main():
         core_logic(current_trace, old_traces)
         with open('last_trace.json', 'w') as last_trace_obj:
             json.dump(current_trace, last_trace_obj)
-            last_trace_obj.close()
+        
         time.sleep(2)
     
     return
