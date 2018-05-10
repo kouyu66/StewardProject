@@ -112,7 +112,7 @@ def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu,
     get_manufacturer_command = 'dmidecode -s system-manufacturer && dmidecode -s system-product-name'
     get_cpu_type_command = 'dmidecode -s processor-version'
     get_mem_count_command = 'dmidecode -t memory | grep Size: | grep -v No'
-    get_men_type_command = "dmidecode -t memory | grep 'Type: DDR'|uniq"
+    get_mem_type_command = "dmidecode -t memory | grep -E 'Type: DDR|Type: DRAM'|uniq"
     get_uptime_command = "cat /proc/uptime | cut -d ' ' -f 1"
     get_nvme_node_command = "ls /dev/nvme* | grep nvme.$"
 
@@ -133,7 +133,7 @@ def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu,
     # 获取服务器内存信息
     mem_count = os.popen(get_mem_count_command).readlines()
     mem_count = [x.strip('\n').strip() for x in mem_count]
-    mem_type = os.popen(get_men_type_command).readlines()
+    mem_type = os.popen(get_mem_type_command).readlines()
     mem_type = [x.strip('\n').strip() for x in mem_type][0]
     mem_dict = Counter(mem_count)
     mems = ' '.join([
@@ -259,22 +259,25 @@ def main():
             old_traces = []
         return old_traces
 
-    def send_info(data, server_ip='10.0.4.133'):
+    def send_info(data, server_ip='10.0.4.155'):
         net_status = get_machine_status()[-1]
         if net_status != '000': # 如果网络状态异常，则终止发送信息
             return
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((server_ip, 6001))
-        s.send((data).encode('utf-8'))  # 发送客户端有效数据
-        # print(s.recv(1024).decode('utf-8')) # 接受服务器端的返回信息
-        s.send(('').encode('utf-8'))  # 发送终止信息（空字符）
-        s.close()  # 关闭连接
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((server_ip, 6001))
+            s.send((data).encode('utf-8'))  # 发送客户端有效数据
+            # print(s.recv(1024).decode('utf-8')) # 接受服务器端的返回信息
+            s.send(('').encode('utf-8'))  # 发送终止信息（空字符）
+            s.close()  # 关闭连接
+        except ConnectionRefusedError as e:
+            print('overmind not found...')
+            return
+
+
         return
 
     # -------- 以下为主要逻辑区域 --------
-
-    # current_traces = genarate_current_trace()
-    # old_traces = read_old_trace()
 
     def core_logic(current_traces, old_traces):
         now_time = timeStamp()
@@ -282,18 +285,18 @@ def main():
             '''对首次识别到的trace，筛选关键信息'''
             key_info = {
                 'info_type': 'new_trace', # 对于新卡，添加该键值以方便服务器端识别信息类型，做出相应处理    
-                'machine': new_trace['machine'],
-                'script': new_trace['script'],
-                'SN': new_trace['SN'],
-                'Model': new_trace['Model'],
-                'Capacity': new_trace['Capacity'],
-                'FwRev': new_trace['FwRev'],
-                'fw_loader_version': new_trace['fw_loader_version'],
-                'uefi_driver_version': new_trace['uefi_driver_version'],
-                'device_status': new_trace['device_status'],  # Normal
-                'Format': new_trace['Format'],
-                'pcispeed': new_trace['pcispeed'],  # 8GT/s x4
-                'boot': new_trace['boot']
+                'machine': new_trace.get('machine'),
+                'script': new_trace.get('script'),
+                'SN': new_trace.get('SN'),
+                'Model': new_trace.get('Model'),
+                'Capacity': new_trace.get('Capacity'),
+                'FwRev': new_trace.get('FwRev'),
+                'fw_loader_version': new_trace.get('fw_loader_version'),
+                'uefi_driver_version': new_trace.get('uefi_driver_version'),
+                'device_status': new_trace.get('device_status'),  # Normal
+                'Format': new_trace.get('Format'),
+                'pcispeed': new_trace.get('pcispeed'),  # 8GT/s x4
+                'boot': new_trace.get('boot')
             }
             return key_info
 
@@ -398,6 +401,8 @@ def main():
 
         return
 
+    time.sleep(5)   # 每次重新调用脚本，意味着重新启动测试机，由于脚本启动顺序的问题，等待测试脚本运行起来以后再进行监控，5s为经验值
+
     while True:
 
         current_trace = genarate_current_trace()
@@ -407,6 +412,7 @@ def main():
             json.dump(current_trace, last_trace_obj)
             last_trace_obj.close()
         time.sleep(2)
-
+    
+    return
 
 main()
