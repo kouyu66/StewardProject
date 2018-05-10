@@ -152,8 +152,9 @@ def out_put(main_info, frequent=60):
 
 def timmer(timmer_pool):
     # while True:
-    for sn in timmer_pool.keys():
-        if time.time() - timmer_pool.get(sn) > 1200: # 该sn超过1200s(20分钟)无响应
+    timmer_sn = timmer_pool.copy()
+    for sn in timmer_sn.keys():
+        if time.time() - timmer_sn.get(sn) > 1200: # 该sn超过1200s(20分钟)无响应
             line_number_list = main_info[(main_info.SN==sn)&(main_info.Archive=='no')].index.tolist()
             if line_number_list:
                 line_number = line_number_list[0]
