@@ -219,8 +219,8 @@ def main():
         scripts = get_running_script()
         machine = get_machine_status()
         ssd = []
-        for ssd_node in machine[4]:
-            var_name = 'nvme%s' % str(machine[4].index(ssd_node))
+        for ssd_node in node_info:
+            var_name = 'nvme%s' % str(node_info.index(ssd_node))
             locals()[var_name] = SSD(ssd_node)
             ssd.append(locals()[var_name])
         # 以nvme ssd作为标的物，生成trace
@@ -273,7 +273,8 @@ def main():
         return old_traces
 
     def send_info(data, server_ip='10.0.4.155'):
-        net_status = get_machine_status()[-1]
+        global net_status
+        
         if net_status != '000': # 如果网络状态异常，则终止发送信息
             return
         try:
@@ -286,8 +287,7 @@ def main():
         except ConnectionRefusedError as e:
             print('overmind not found...')
             return
-
-
+            
         return
 
     # -------- 以下为主要逻辑区域 --------
