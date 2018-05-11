@@ -7,6 +7,8 @@ import socket
 import threading
 import pandas as pd
 
+global now_time
+
 def timeStamp():
     now_time = datetime.datetime.now()
     readable_time = now_time.strftime('%Y-%m-%d_%H_%M_%S')
@@ -36,7 +38,7 @@ def infomationExchange(data, addr):
     def processHeartBeat(decode_data):
         if not decode_data.get('info_type') == 'heartbeat':
             return
-        timmer_pool[decode_data['SN']] = time.time()
+        timmer_pool[decode_data['SN']] = time.time()    # 刷新计时器时间为当前时间
         # info = '[Heart_Beat] {0} {1} online'.format(now_time, decode_data['SN'])
         # notes.append(info)
         return
@@ -58,10 +60,9 @@ def infomationExchange(data, addr):
             return      # 如果统计表格中不包含数据，则信息有误，不作处理
         
         sn = decode_data.pop('SN')
-        test_machine_time = decode_data.pop('now_time')
+        test_machine_time = decode_data.pop('now_time') # 为了便于核对错误信息，此处时间使用client端时间
         
         timmer_pool[sn] = time.time()    # 刷新计时器时间
-        
         
         for key in decode_data.keys():  # 对所有变更信息做如下处理
             try:
@@ -72,6 +73,7 @@ def infomationExchange(data, addr):
                 info = '[Update] {0} {1} {2} {3} {4} ==> {5}'.format(test_machine_time, addr[0], sn, key, old_info, current_info)  # 生成log信息
                 notes.append(info)  
             except ValueError as e:
+                print('ValueErr, old_info, current_info required.')
                 print(addr[0], decode_data.get(key))
 
     def processCardRemove(decode_data):
@@ -85,10 +87,16 @@ def infomationExchange(data, addr):
         line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()
         if line_number_list:
             line_number = line_number_list[0]
+
+            # 将offline信息及归档信息刷新到表格：
             main_info.loc[line_number, 'Online'] = 'offline'
             main_info.loc[line_number, 'Archive'] = 'yes'
+            
+            # 判断是否ssd是否异常退出：
             if decode_data.get('err') == 1:
                 main_info.loc[line_number, 'Err'] = 'yes'
+        
+        # 发送trace信息给服务端
         info = '[Eject] {0} {1} Card Eject Dected. SN: {2} Err: {3}.'.format(decode_data('now_time'), addr[0], decode_data('SN'), decode_data.get('err'))
         notes.append(info)
         return 
@@ -140,7 +148,7 @@ def infomationExchange(data, addr):
     with open('trace.txt', 'a') as log: # 写log
         for line in notes:
             log.write(line + '\n')
-        log.close() 
+
     return
 
 def out_put(main_info, frequent=60):
@@ -158,12 +166,14 @@ def timmer(timmer_pool):
             line_number_list = main_info[(main_info.SN==sn)&(main_info.Archive=='no')].index.tolist()
             if line_number_list:
                 line_number = line_number_list[0]
-                main_info.loc[line_number, 'Online'] = 'offline'
+                main_info.loc[line_number, 'Online'] = 'Offline'
         # time.sleep(5)
+    del timmer_sn
+    
     return
 
 # -------- main --------#
-global now_time
+
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 6001))
