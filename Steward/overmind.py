@@ -186,7 +186,26 @@ def infomationExchange(data, addr):
 
 
 # ------ 创建基础数据结构 ------ #
-main_info = pd.DataFrame(columns=['IP','machine', 'boot', 'pcispeed', 'device_status', 'SN', 'Model', 'Capacity', 'Format', 'FwRev', 'Err', 'fw_loader_version', 'uefi_driver_version', 'script', 'Online', 'Archive'])
+main_info = pd.DataFrame(columns=[
+    'IP',
+    'machine',
+    'boot',
+    'pcispeed',
+    'device_status',
+    'SN',
+    'Model',
+    'Capacity',
+    'Format',
+    'FwRev',
+    'Err',
+    'fw_loader_version',
+    'uefi_driver_version',
+    'script',
+    'start_time',
+    'stop_time',
+    'Online',
+    'Archive'])
+
 timmer_pool = {}    # 创建包含 sn : heart_beat_local_time的本地字典，用来统计ssd的心跳时间
 # ------创建基础数据结构结束 ------#
 
