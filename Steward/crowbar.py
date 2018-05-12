@@ -86,6 +86,16 @@ def timeStamp():
     readable_time = client_time.strftime('%Y-%m-%d_%H_%M_%S')
     return readable_time
 
+def get_uptime()
+    # 获取服务器开机时长信息
+    uptime_seconds_str = os.popen(get_uptime_command).readlines()[0]
+    uptime_seconds = float(uptime_seconds_str)
+    m, s = divmod(uptime_seconds, 60)
+    h, m = divmod(m, 60)
+    uptime = "%02d:%02d:%02d" % (h, m, s)
+
+    return uptime_seconds, uptime
+
 # ------ 获取信息 ------ #
 def get_data():
 
@@ -175,13 +185,6 @@ def get_data():
                 "./nvme id-ctrl {0} | grep ^vid".format(node)).readlines()
             if identify_info and '0x1d78' not in identify_info[0]:  # 排除非dera ssd
                 node_info.remove(node)
-
-        # 获取服务器开机时长信息
-        uptime_seconds = os.popen(get_uptime_command).readlines()[0]
-        uptime_seconds = float(uptime_seconds)
-        m, s = divmod(uptime_seconds, 60)
-        h, m = divmod(m, 60)
-        uptime = "%02d:%02d:%02d" % (h, m, s)
 
         # 获取服务器当前网络状态信息
         local = '10.0.4.1'  # 本地网关
@@ -366,41 +369,53 @@ def process_data(current_traces, old_traces):
         return
 
     def process_normal_mode(normal_cards_sn):
-        '''
-        即不存在新插入卡，也不存在移除卡的情况下，执行该函数，
-        该函数比较相同sn的ssd在两次不同时间的扫描下，各项信息是否一致，并通知给主控服务器
-        '''
-        global now_time
+        
+        def process_script_change(info,key_info):            
+            global now_time
+            last_list, current_list = info
+
+            if not last_list:   # 检测到脚本启动
+                if current_list[-1] == '1':  # 父进程为init进程，则当前进程由系统开机启动
+                    key_info['stop_time'] = ['',''] # 清空stop_time时间戳，因为检测到进程又自动启动了
+                else:
+                    key_info['start_time'] = ['', now_time]    # 该进程非开机启动，发送启动时间戳
+            elif not current_list:    # 检测到脚本终止
+                key_info['stop_time'] = ['', now_time]  # 将stop_time时间戳写入        
+            else:   # 检测到脚本信息变动：
+                if last_list[:2] == current_list[:2]:
+                    if current_list[-1] == '1': # 检测到掉电脚本执行后的首次重启
+                        del key_info['script']  # 忽略本次变更
+                else:   # 检测到非开机启动进程，发送启动时间戳
+                    key_info['start_time'] = ['', now_time]
+            return key_info
 
         for sn in normal_cards_sn:
             current_trace = [trace for trace in current_traces if trace['SN'] == sn][0]
             old_trace = [trace for trace in old_traces if trace['SN'] == sn][0]
+            head_info = {'now_time': now_time,'SN': sn}
             key_info = {}
+
             for key in current_trace:
-                if key in old_trace:
-                    if current_trace[key] != old_trace[key]:
-                        # print(key, current_trace[key])
-                        key_info[key] = [
-                            old_trace[key], current_trace[key]
-                        ]
+                if key in old_trace and current_trace[key] != old_trace[key]:
+                    key_info[key] = [old_trace[key], current_trace[key]]
                     else:
                         continue
-            if key_info:
-                head_info = {
-                    'info_type': 'normal_update',
-                    'now_time': now_time,
-                    'SN': sn
-                }
-                key_info.update(head_info)
+
+            # 增加对脚本启动时间的判断
+            if key_info.get('script'):
+                info = key_info.get('script')
+                key_info = process_script_change(info, key_info)
+            
+            if not key_info:
+                head_info['info_type': 'heartbeat']
+            
             else:
-                key_info = {
-                    'info_type': 'heartbeat',
-                    'now_time': now_time,
-                    'SN': sn
-                }
+                head_info['info_type': 'normal_update']
+                head_info.update(key_info)
+            
             json_info = json.dumps(key_info)
             send_info(json_info)
-            # pass    # send heartbeat.
+
         return
 
     def indetify_card_status(current_traces, old_traces):
@@ -427,9 +442,13 @@ def process_data(current_traces, old_traces):
 
 
 # ------ main logic ------ #
+# 开机1分钟以内为准备阶段，不做检查
+uptime_seconds, uptime = get_uptime()
+while uptime_seconds < 60:
+    time.sleep(1)
+    uptime_seconds, uptime = get_uptime()
 
-time.sleep(10)  # 每次重新调用脚本，意味着重新启动测试机，由于脚本启动顺序的问题，等待测试脚本运行起来以后再进行监控，10s为经验值
-
+# 准备阶段结束，开始循环检查...
 while True:
     global now_time
     now_time = timeStamp()
