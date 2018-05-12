@@ -23,6 +23,22 @@ global now_time
 
 
 # ------ 通用函数 ------ #
+def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
+    get_pci_bus_number_line_cmd = 'find /sys/* -name {0}|grep devices'.format(
+        disk_name)
+    pci_bus_number_line = os.popen(get_pci_bus_number_line_cmd).readlines()[0]
+    split_bus_num = re.split('/', pci_bus_number_line)
+    pci_bus_number = split_bus_num[-3]
+
+    lspci_cmd = "lspci -vvv -s {0} | grep 'LnkSta:' | cut -d ' ' -f 2,4".format(
+        pci_bus_number)
+    lspci_info = os.popen(lspci_cmd).readlines()
+    lspci_info_strip = [x.strip('\n') for x in lspci_info][0]
+
+    pci_speed = ''.join(lspci_info_strip.split(','))
+
+    return pci_speed
+
 class SSD():
     '''一次模拟SSD的尝试'''
 
@@ -86,8 +102,9 @@ def timeStamp():
     readable_time = client_time.strftime('%Y-%m-%d_%H_%M_%S')
     return readable_time
 
-def get_uptime()
+def get_uptime():
     # 获取服务器开机时长信息
+    get_uptime_command = "cat /proc/uptime | cut -d ' ' -f 1"
     uptime_seconds_str = os.popen(get_uptime_command).readlines()[0]
     uptime_seconds = float(uptime_seconds_str)
     m, s = divmod(uptime_seconds, 60)
@@ -99,21 +116,7 @@ def get_uptime()
 # ------ 获取信息 ------ #
 def get_data():
 
-    def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
-        get_pci_bus_number_line_cmd = 'find /sys/* -name {0}|grep devices'.format(
-            disk_name)
-        pci_bus_number_line = os.popen(get_pci_bus_number_line_cmd).readlines()[0]
-        split_bus_num = re.split('/', pci_bus_number_line)
-        pci_bus_number = split_bus_num[-3]
 
-        lspci_cmd = "lspci -vvv -s {0} | grep 'LnkSta:' | cut -d ' ' -f 2,4".format(
-            pci_bus_number)
-        lspci_info = os.popen(lspci_cmd).readlines()
-        lspci_info_strip = [x.strip('\n') for x in lspci_info][0]
-
-        pci_speed = ''.join(lspci_info_strip.split(','))
-
-        return pci_speed
 
     def get_running_script():  # 获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, ppid]]
 
@@ -146,7 +149,6 @@ def get_data():
         get_cpu_type_command = 'dmidecode -s processor-version'
         get_mem_count_command = 'dmidecode -t memory | grep Size: | grep -v No'
         get_mem_type_command = "dmidecode -t memory | grep -E 'Type: DDR|Type: DRAM'|uniq"
-        get_uptime_command = "cat /proc/uptime | cut -d ' ' -f 1"
         get_nvme_node_command = "ls /dev/nvme* | grep nvme.$"
 
         # 获取服务器厂商，型号信息
@@ -398,8 +400,8 @@ def process_data(current_traces, old_traces):
             for key in current_trace:
                 if key in old_trace and current_trace[key] != old_trace[key]:
                     key_info[key] = [old_trace[key], current_trace[key]]
-                    else:
-                        continue
+                else:
+                    continue
 
             # 增加对脚本启动时间的判断
             if key_info.get('script'):
