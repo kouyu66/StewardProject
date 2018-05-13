@@ -86,7 +86,7 @@ def infomationExchange(data, addr):
 
         return
 
-    def processUpdate(decode_data): # 处理update
+    def processUpdate(decode_data): # 处理update信息
 
         global main_info
         global timmer_pool
@@ -186,6 +186,7 @@ def infomationExchange(data, addr):
 
 
 # ------ 创建基础数据结构 ------ #
+timmer_pool = {}    # 创建包含 sn : heart_beat_local_time的本地字典，用来统计ssd的心跳时间
 main_info = pd.DataFrame(columns=[
     'IP',
     'machine',
@@ -205,10 +206,6 @@ main_info = pd.DataFrame(columns=[
     'stop_time',
     'Online',
     'Archive'])
-
-timmer_pool = {}    # 创建包含 sn : heart_beat_local_time的本地字典，用来统计ssd的心跳时间
-# ------创建基础数据结构结束 ------#
-
 # ------创建主循环结构 ------#
 while True:
     now_time = timeStamp()
@@ -217,6 +214,5 @@ while True:
     t1.start()
     timmer(timmer_pool)
     out_put(main_info)
-# ------ 创建主循环结构结束 ------#
     
     
