@@ -11,9 +11,6 @@ import json
 import socket
 import sys
 from collections import Counter
-'''
-ssd测试过程中用到的类信息
-'''
 
 global node_info
 global net_status
@@ -39,45 +36,34 @@ def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
 
     return pci_speed
 
-class SSD():
-    '''一次模拟SSD的尝试'''
+def load_ssd_info(node):
+    diskname = re.split('/', node)[-1] # 获取nvme*
+    ssd_info = {}
+    # ------ 给ssd各项值赋值 ------ # 
+    # 获取pci速度信息
+    pci_speed_processed = get_pci_speed(diskname)
+    ssd_info['pcispeed'] = pci_speed_processed
 
-    def __init__(self, node):
-        self.node = node
-        self.diskname = re.split('/', self.node)[-1]
-        self.info = {}
-        # self.pcispeed = ''
-        # self.boot = ''
-        # self.names = {} # [sn, mn, cap, boot, namespace]
-        # self.status = {}    # [status, pcispeed, temps, cap_status, dev_status_up, current_pwr, ddr_err_bit, gpio_err_bit, pcie_voltage]
-        # self.vers = {}  # [fw, fwld, fmt, uefi_driver]
-        # self.counters = {}  # [powerCycles, powerOnHours, unsafe_shutdowns, full_rebulid, raw_rebuild]
-        # self.err = {} # [pcie_uncorr_err, pcie_fatal_err, nand_init_fail, nand_erase_err, nand_program_err, media_err,init_pcie_vot_low_cnt, rt_pcie_vot_low_cnt]
-    def load(self):
-        '''更新ssd状态信息'''
-        # 获取pci速度信息
-        pci_speed_processed = get_pci_speed(self.disk_name)
-        self.info['pcispeed'] = pci_speed_processed
+    # 获取boot 信息
+    get_boot_drive_cmd = "df -h | grep -E '/boot$'"
+    boot_drive_info = os.popen(get_boot_drive_cmd).readlines()[0]
+    if diskname in boot_drive_info:
+        boot = 'Master'
+    else:
+        boot = 'Slave'
+    ssd_info['boot'] = boot
 
-        # 获取boot 信息
-        get_boot_drive_cmd = "df -h | grep -E '/boot$'"
-        boot_drive_info = os.popen(get_boot_drive_cmd).readlines()[0]
-        if self.diskname in boot_drive_info:
-            boot = 'Master'
-        else:
-            boot = 'Slave'
-        self.info['boot'] = boot
+    # 获取dera info信息
+    get_dera_info_cmd = "./nvme dera info {0}".format(node)
+    dera_info = os.popen(get_dera_info_cmd).readlines()
+    ssd.update(list_to_dict(dera_info))
 
-        # 获取dera info信息并添加到字典
-        get_dera_info_cmd = "./nvme dera info {0}".format(self.node)
-        dera_info = os.popen(get_dera_info_cmd).readlines()
-        self.info.update(list_to_dict(dera_info))
+    # 获取status信息并添加到字典
+    get_dera_state_cmd = "./nvme dera state {0}".format(node)
+    dera_state = os.popen(get_dera_state_cmd).readlines()
+    ssd_info.update(list_to_dict(dera_state))
 
-        # 获取status信息并添加到字典
-        get_dera_state_cmd = "./nvme dera state {0}".format(self.node)
-        dera_state = os.popen(get_dera_state_cmd).readlines()
-        self.info.update(list_to_dict(dera_state))
-        return
+    return ssd_info
 
 def list_to_dict(list_info, sep=':'):  # 输入列表， 以分隔符分隔， 输出字典
     '''将包含冒号的长字符串转换为字典格式'''
@@ -115,7 +101,6 @@ def get_uptime():
 
 # ------ 获取信息 ------ #
 def get_data():
-
 
 
     def get_running_script():  # 获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, ppid]]
@@ -210,39 +195,30 @@ def get_data():
 
         return host_info
 
-    def genarate_current_trace():
-        '''获取当前运行的脚本，机器状态，及ssd实例'''
+    def genarate_current_trace():   # 生成trace列表
+
         global node_info
 
         traces = []
+        running_script = []    
         scripts = get_running_script()
         machine = get_machine_status()
-        ssd = []
-        for ssd_node in node_info:
-            var_name = 'nvme%s' % str(node_info.index(ssd_node))
-            locals()[var_name] = SSD(ssd_node)
-            ssd.append(locals()[var_name])
-        # 以nvme ssd作为标的物，生成trace
-        for nvme in ssd:
-            nvme.load()
-            node = nvme.node
-            running_script = ''
+        script_on_dev = {}
 
-            if scripts:
-                for script in scripts:
-                    if 'ts_pwr.py' in script[
-                            0]:  # 由于ts_pwr和ts_top带有掉电测试，所以是全局式的脚本，所有ssd均受影响，所以只要有一个SSD在运行该测试，则认为所有ssd均受此影响
-                        running_script = script
-                    elif 'ts_top.py' in script[0]:
-                        running_script = script
-                    elif node in script[1]:
-                        running_script = script
-                    else:
-                        pass
-            add_machine_and_script = dict([['machine', machine],
-                                            ['script', running_script]])
-            trace = nvme.info
-            trace.update(add_machine_and_script)
+        for node in node_info:
+            for script in scripts:  # 获取当前设备的脚本信息
+                if 'ts_pwr.py' in script[0] or 'ts_top.py' in script[0]:    # 掉电影响所有的ssd，所以认为掉电脚本为全局脚本
+                    running_script = script
+                    break
+                if node in script[1]:   # 除掉电脚本外，特殊指明设备的脚本
+                    running_script = script
+                else:   # 无当前卡相关的脚本
+                    running_script = [] 
+
+            ssd_info = load_ssd_info(node)  # 获取当前设备的状态信息
+            head_info = dict([['machine', machine], ['script', running_script]])    # 获取当前设备对应的脚本信息和机器信息
+            trace = head_info.update(ssd_info)     # 生成trace
+            # 删除不需要监控的trace消息:
             if 'host_write_commands' in trace:
                 del trace['host_write_commands']
             if 'host_read_commands' in trace:
@@ -260,7 +236,6 @@ def get_data():
             if 'controller_busy_time' in trace:
                 del trace['controller_busy_time']
             traces.append(trace)
-
         return traces
 
     def read_old_trace(file_name='last_trace.json'):
@@ -276,7 +251,7 @@ def get_data():
 
     return current_traces, old_traces
 
-
+# ------ 处理信息 ------ #
 def process_data(current_traces, old_traces):
     global now_time
     
@@ -442,10 +417,10 @@ def process_data(current_traces, old_traces):
 
     return
 
-
 # ------ main logic ------ #
 # 开机1分钟以内为准备阶段，不做检查
-uptime_seconds, uptime = get_uptime()
+uptime_seconds, uptime = get_uptime()   # 脚本运行时首先判断开机时长
+
 while uptime_seconds < 60:
     time.sleep(1)
     uptime_seconds, uptime = get_uptime()
