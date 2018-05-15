@@ -23,9 +23,13 @@ global now_time
 def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
     get_pci_bus_number_line_cmd = 'find /sys/* -name {0}|grep devices'.format(
         disk_name)
-    pci_bus_number_line = os.popen(get_pci_bus_number_line_cmd).readlines()[0]
-    split_bus_num = re.split('/', pci_bus_number_line)
-    pci_bus_number = split_bus_num[-3]
+    pci_bus_number_line = os.popen(get_pci_bus_number_line_cmd).readlines()
+    if pci_bus_number_line:
+        pci_bus_number_line_str = pci_bus_number_line[0]
+        split_bus_num = re.split('/', pci_bus_number_line_str)
+        pci_bus_number = split_bus_num[-3]
+    else:
+        return 'Unknown'
 
     lspci_cmd = "lspci -vvv -s {0} | grep 'LnkSta:' | cut -d ' ' -f 2,4".format(
         pci_bus_number)
@@ -37,17 +41,17 @@ def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
     return pci_speed
 
 def load_ssd_info(node):
-    diskname = re.split('/', node)[-1] # 获取nvme*
+    disk_name = re.split('/', node)[-1] # 获取nvme*
     ssd_info = {}
     # ------ 给ssd各项值赋值 ------ # 
     # 获取pci速度信息
-    pci_speed_processed = get_pci_speed(diskname)
+    pci_speed_processed = get_pci_speed(disk_name)
     ssd_info['pcispeed'] = pci_speed_processed
 
     # 获取boot 信息
     get_boot_drive_cmd = "df -h | grep -E '/boot$'"
     boot_drive_info = os.popen(get_boot_drive_cmd).readlines()[0]
-    if diskname in boot_drive_info:
+    if disk_name in boot_drive_info:
         boot = 'Master'
     else:
         boot = 'Slave'
@@ -56,7 +60,7 @@ def load_ssd_info(node):
     # 获取dera info信息
     get_dera_info_cmd = "./nvme dera info {0}".format(node)
     dera_info = os.popen(get_dera_info_cmd).readlines()
-    ssd.update(list_to_dict(dera_info))
+    ssd_info.update(list_to_dict(dera_info))
 
     # 获取status信息并添加到字典
     get_dera_state_cmd = "./nvme dera state {0}".format(node)
@@ -207,7 +211,7 @@ def get_data():
 
         for node in node_info:
             for script in scripts:  # 获取当前设备的脚本信息
-                if 'ts_pwr.py' in script[0] or 'ts_top.py' in script[0]:    # 掉电影响所有的ssd，所以认为掉电脚本为全局脚本
+                if 'ts_pwr' in script[0] or 'ts_top' in script[0]:    # 掉电影响所有的ssd，所以认为掉电脚本为全局脚本
                     running_script = script
                     break
                 if node in script[1]:   # 除掉电脚本外，特殊指明设备的脚本
@@ -216,8 +220,8 @@ def get_data():
                     running_script = [] 
 
             ssd_info = load_ssd_info(node)  # 获取当前设备的状态信息
-            head_info = dict([['machine', machine], ['script', running_script]])    # 获取当前设备对应的脚本信息和机器信息
-            trace = head_info.update(ssd_info)     # 生成trace
+            trace = dict([['machine', machine], ['script', running_script]])    # 获取当前设备对应的脚本信息和机器信息
+            trace.update(ssd_info)     # 生成trace
             # 删除不需要监控的trace消息:
             if 'host_write_commands' in trace:
                 del trace['host_write_commands']
@@ -259,6 +263,7 @@ def process_data(current_traces, old_traces):
         global net_status
 
         if net_status != '000':  # 如果网络状态异常，则终止发送信息
+            assert net_status=='000', 'network abnormal.'
             return
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -320,7 +325,7 @@ def process_data(current_traces, old_traces):
 
         return
 
-    def process_card_remove(remove_card):
+    def process_card_remove(remove_cards_sn):
         '''
         构建一条新的消息，格式如下，
         报告给中央服务器，该卡已经在机器上被移除了
@@ -347,6 +352,15 @@ def process_data(current_traces, old_traces):
 
     def process_normal_mode(normal_cards_sn):
         
+        def process_temp_change(key_info):
+            '''只监控温度警告时的温度信息，如果变动信息不含警告信息，则忽略'''
+            key_list = list(key_info.keys())
+            
+            for key in key_list:
+                if 'temperature' in key:
+                    del key_info[key]
+            return key_info
+            
         def process_script_change(info,key_info):            
             global now_time
             last_list, current_list = info
@@ -376,26 +390,32 @@ def process_data(current_traces, old_traces):
                 if key in old_trace and current_trace[key] != old_trace[key]:
                     key_info[key] = [old_trace[key], current_trace[key]]
                 else:
-                    continue
+                    pass
 
             # 增加对脚本启动时间的判断
             if key_info.get('script'):
                 info = key_info.get('script')
                 key_info = process_script_change(info, key_info)
             
+            # 2018_05_15 增加对温度打印的处理
+            temp_warn = key_info.get('warning_temperature_time')
+            temp_critical = key_info.get('critical_composite_temperature_time')
+            if not temp_warn and not temp_critical:
+                key_info = process_temp_change(key_info)
+
             if not key_info:
-                head_info['info_type': 'heartbeat']
+                head_info['info_type'] = 'heartbeat'
             
             else:
-                head_info['info_type': 'normal_update']
+                head_info['info_type'] = 'normal_update'
                 head_info.update(key_info)
-            
-            json_info = json.dumps(key_info)
+
+            json_info = json.dumps(head_info)
             send_info(json_info)
 
         return
 
-    def indetify_card_status(current_traces, old_traces):
+    def identify_card_status(current_traces, old_traces):
         current_cards_sn = [trace['SN'] for trace in current_traces if current_traces]  # 获取当前trace中ssd的names部分
         last_cards_sn = [trace['SN'] for trace in old_traces if old_traces]  # 获取上次扫描中ssd的names部分
         add_cards_sn = []
@@ -413,7 +433,7 @@ def process_data(current_traces, old_traces):
             process_normal_mode(normal_cards_sn)
         return
 
-    indetify_card_status(current_traces, old_traces)
+    identify_card_status(current_traces, old_traces)
 
     return
 
@@ -426,6 +446,7 @@ while uptime_seconds < 60:
     uptime_seconds, uptime = get_uptime()
 
 # 准备阶段结束，开始循环检查...
+
 while True:
     global now_time
     now_time = timeStamp()
