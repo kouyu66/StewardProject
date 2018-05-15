@@ -95,6 +95,15 @@ def infomationExchange(data, addr):
         global timmer_pool
 
         timmer_pool[decode_data['SN']] = time.time()    # 刷新计时器时间为当前时间
+        sn = decode_data['SN']
+        
+        line_number_list = main_info[(main_info.SN==decode_data['SN'])&(main_info.Archive=='no')].index.tolist()    # 定位统计表格中该trace的行号
+        if line_number_list:                                                                                        # 定位统计表格中该trace的行号
+            line_number = line_number_list[0]
+            main_info.loc[line_number, 'Online'] == 'online'                                                                     # 定位统计表格中该trace的行号
+        else:
+            print('{0}-{1} information not correct: init info lost.\nNeed to rerun crowbar on target machine.'.format(addr[0], decode_data['SN']))
+
 
         return
 
