@@ -10,6 +10,7 @@ import pandas as pd
 global now_time
 global timmer_pool
 global main_info
+global notes
 
 # 获取时间戳函数：
 def timeStamp():
@@ -22,11 +23,19 @@ def timmer(timmer_pool):
     # while True:
     timmer_sn = timmer_pool.copy()
     for sn in timmer_sn.keys():
-        if time.time() - timmer_sn.get(sn) > 1200: # 该sn超过1200s(20分钟)无响应
-            line_number_list = main_info[(main_info.SN==sn)&(main_info.Archive=='no')].index.tolist()
-            if line_number_list:
-                line_number = line_number_list[0]
+        line_number_list = main_info[(main_info.SN==sn)&(main_info.Archive=='no')].index.tolist()
+        if line_number_list:
+            line_number = line_number_list[0]
+            
+            if time.time() - timmer_sn.get(sn) > 1200: # 该sn超过1200s(20分钟)无响应
                 main_info.loc[line_number, 'Online'] = 'Offline'
+            
+            elif time.time() - timmer_sn.get(sn) > 5:  # 该sn超过5s无响应，说明机器在重启
+                main_info.loc[line_number, 'Online'] = 'Booting...'
+        else:
+            print('{0}-{1} information not correct: init info lost.\nNeed to rerun crowbar on target machine.'.format(addr[0], sn))
+
+
         # time.sleep(5)
     del timmer_sn
     
@@ -70,6 +79,7 @@ def infomationExchange(data, addr):
         return info_type
 
     def dataProcess(info_type): # 将传入信息交由特定函数处理
+
         if info_type == 'heartbeat':
             processHeartBeat(decode_data)  # 处理heartbeat的函数
         elif info_type == 'normal_update':
@@ -82,6 +92,8 @@ def infomationExchange(data, addr):
         return
 
     def processHeartBeat(decode_data):  # 处理heratbear
+        global timmer_pool
+
         timmer_pool[decode_data['SN']] = time.time()    # 刷新计时器时间为当前时间
 
         return
@@ -90,7 +102,8 @@ def infomationExchange(data, addr):
 
         global main_info
         global timmer_pool
-        
+        global notes
+
         decode_data.pop('info_type')
         
         # ------ 统计表中不包含该ssd，则不做处理 ------#
@@ -98,7 +111,7 @@ def infomationExchange(data, addr):
         if line_number_list:                                                                                        # 定位统计表格中该trace的行号
             line_number = line_number_list[0]                                                                       # 定位统计表格中该trace的行号
         else:
-            print('{0}-{1} information not correct: init info lost.'.format(addr[0], decode_data['SN']))      # 如果统计表格中不包含数据，则信息有误, 打印消息到主控显示
+            print('{0}-{1} information not correct: init info lost.\nNeed to rerun crowbar on target machine.'.format(addr[0], decode_data['SN']))      # 如果统计表格中不包含数据，则信息有误, 打印消息到主控显示
         
         # ------ 刷新计时器时间 ------ #
         sn = decode_data.pop('SN')
@@ -107,6 +120,8 @@ def infomationExchange(data, addr):
         
         # ------ 判断关键信息是否变更 ------ #
         for key in decode_data.keys():  # 对所有变更信息做如下处理
+            global notes
+
             try:
                 old_info, current_info = decode_data.get(key)   # 将变更数据解压到两个变量
                 if key in main_info.columns:    # 判断关键信息是否出现变更
@@ -126,6 +141,7 @@ def infomationExchange(data, addr):
         # archive 设置为True
         
         global timmer_pool
+        global notes
         info = ''
 
         # 删除该ssd对应的计时器
@@ -153,6 +169,7 @@ def infomationExchange(data, addr):
         
         global main_info
         global now_time
+        global notes
 
         decode_data['IP'] = addr[0]
         decode_data['Online'] = 'online'
@@ -174,10 +191,13 @@ def infomationExchange(data, addr):
         notes.append(info)
         return
 
+    global notes
+
     decode_data = json.loads(data.decode('utf-8'))  # 解压原始数据
     notes = []  # 清空log信息
     info_type = dataIdentify(decode_data)   # 识别信息类型
     dataProcess(info_type)  # 处理对应类型的信息
+
     with open('trace.txt', 'a') as log: # 写log
         for line in notes:
             log.write(line + '\n')
