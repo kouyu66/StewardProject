@@ -1,101 +1,56 @@
 #!/usr/bin/env python3
 # Coding:UTF-8
+
 import os
-import re
+from time import sleep
+from tkinter import *
 
-def load_ssd_info(node):
-    diskname = re.split('/', node)[-1] # 获取nvme*
-    ssd_info = {}
-    # ------ 给ssd各项值赋值 ------ # 
-    # 获取pci速度信息
-    pci_speed_processed = get_pci_speed(diskname)
-    ssd_info['pcispeed'] = pci_speed_processed
+class Monitor(object):
 
-    # 获取boot 信息
-    get_boot_drive_cmd = "df -h | grep -E '/boot$'"
-    boot_drive_info = os.popen(get_boot_drive_cmd).readlines()[0]
-    if diskname in boot_drive_info:
-        boot = 'Master'
-    else:
-        boot = 'Slave'
-    ssd_info['boot'] = boot
+    def __init__(self, initdir=None):
+        self.top = Tk() # 生成画布
+        self.label = Label(self.top, text='System Test Monitor v0.1')   # 生成一个不需要交互的标签
+        self.label.pack()   # 放对位置
 
-    # 获取dera info信息
-    get_dera_info_cmd = "./nvme dera info {0}".format(node)
-    dera_info = os.popen(get_dera_info_cmd).readlines()
-    ssd.update(list_to_dict(dera_info))
+        self.cwd = StringVar(self.top)  # 不明白...
 
-    # 获取status信息并添加到字典
-    get_dera_state_cmd = "./nvme dera state {0}".format(node)
-    dera_state = os.popen(get_dera_state_cmd).readlines()
-    ssd_info.update(list_to_dict(dera_state))
+        self.dirl = Label(self.top, fg='blue', font=('Helvetica', 12, 'bold'))
+        self.dirl.pack()
 
-    return ssd_info
+        self.dirfm = Frame(self.top)    # 生成一个包含其他控件的容器
+        self.dirsb = Scrollbar(self.dirfm)  # 生成滚动轴控件
+        self.dirsb.pack(side=RIGHT, fill=Y) # 定义滚动轴位置
+        self.dirs = Listbox(self.dirfm, height=15, width=50, yscrollcommand=self.dirsb.set) # 生成选项列表区域
+        self.dirs.bind('<Double-l>', self.setDirAndGo)  # dir框架区域内双击条目将触发setDirAndGo函数
+        self.dirsb.config(command=self.dirs.yview)  #将滚动轴与框架区域联系起来
+        self.dirs.pack(side=LEFT, fill=BOTH)    # 定义选项列表区域位置
+        self.dirfm.pack()   # 定义框架区域位置
 
-def genarate_current_trace():
+        self.dirn = Entry(self.top, width=50, textvariable=self.cwd)    # 生成一个输入框
+        self.dirn.bind('<Return>', self.doLS)   # 输入框绑定回车键，单击回车会调用doLS函数
+        self.dirn.pack()    # 放置输入框
 
-    global node_info
+        self.bfm = Frame(self.top)  # 生成一个包含其他控件的容器
+        self.clr = Button(self.bfm, text='Clear', command=self.clrDir, activeforeground='white', activebackground='bule')   # 定义clear按钮，并关联到clrDir函数
+        self.ls = Button(self.bfm, text='List Directory', command=self.doLS, activeforeground='white', activebackground='green')    # 定义ListDirectory按钮，并关联到doLS函数
+        self.quit = Button(self.bfm, text='Quit', command=self.top.quit, activeforeground='white', activebackground='red')  # 定义Quit按钮，并关联到界面关闭函数
+        self.clr.pack(side=LEFT)
+        self.ls.pack(side=LEFT)
+        self.quit.pack(side=LEFT)
+        self.bfm.pack()
 
-    traces = []
-    running_script = []    
-    scripts = get_running_script()
-    machine = get_machine_status()
-
-    for script in scripts:
-        if 'ts_pwr.py' in script[0] or 'ts_top.py' in script[0]:
-            running_script = script
-            break
+        if initdir:
+            self.cwd.set(os.curdir)
+            self.doLS()
     
-    for node in node_info:
-        if not running_script:
-            
-            
-        ssd_info = load_ssd_info(node)
+    def clsDir(self, en=None):
+        self.cwd.set('')
 
-
-
-        ssd.append(ssd_info)
-
-
-
-
-    # 以nvme ssd作为标的物，生成trace
-    for ssd_info_dict in ssd:
-        nvme.load()
-        node = nvme.node
-        running_script = ''
-
-        if scripts:
-            for script in scripts:
-                if 'ts_pwr.py' in script[
-                        0]:  # 由于ts_pwr和ts_top带有掉电测试，所以是全局式的脚本，所有ssd均受影响，所以只要有一个SSD在运行该测试，则认为所有ssd均受此影响
-                    running_script = script
-                elif 'ts_top.py' in script[0]:
-                    running_script = script
-                elif node in script[1]:
-                    running_script = script
-                else:
-                    pass
-        add_machine_and_script = dict([['machine', machine],
-                                        ['script', running_script]])
-        trace = nvme.info
-        trace.update(add_machine_and_script)
-        if 'host_write_commands' in trace:
-            del trace['host_write_commands']
-        if 'host_read_commands' in trace:
-            del trace['host_read_commands']
-        if 'data_units_written' in trace:
-            del trace['data_units_written']
-        if 'data_units_read' in trace:
-            del trace['data_units_read']
-        if 'current_power' in trace:
-            del trace['current_power']
-        if 'current_pcie_volt' in trace:
-            del trace['current_pcie_volt']
-        if 'cap_voltage' in trace:
-            del trace['cap_voltage']
-        if 'controller_busy_time' in trace:
-            del trace['controller_busy_time']
-        traces.append(trace)
-
-    return traces    
+    def setDirAndGo(self, ev=None):
+        self.last = self.cwd.get()
+        self.dirs.config(selectbackground='red')
+        check = self.dirs.get(self.dirs.curselection()) # 获取鼠标选中的
+        if not check:
+            check = os.curdir
+        self.cwd.set(check)
+        self.doLS()
