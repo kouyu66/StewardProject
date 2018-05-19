@@ -9,7 +9,6 @@ import time
 import datetime
 import json
 import socket
-import sys
 from collections import Counter
 
 global node_info
@@ -40,10 +39,11 @@ def get_pci_speed(disk_name):  # 查询ssd字符设备的的pcie速度
 
     return pci_speed
 
+
 def load_ssd_info(node):
-    disk_name = re.split('/', node)[-1] # 获取nvme*
+    disk_name = re.split('/', node)[-1]  # 获取nvme*
     ssd_info = {}
-    # ------ 给ssd各项值赋值 ------ # 
+    # ------ 给ssd各项值赋值 ------ #
     # 获取pci速度信息
     pci_speed_processed = get_pci_speed(disk_name)
     ssd_info['pcispeed'] = pci_speed_processed
@@ -69,6 +69,7 @@ def load_ssd_info(node):
 
     return ssd_info
 
+
 def list_to_dict(list_info, sep=':'):  # 输入列表， 以分隔符分隔， 输出字典
     '''将包含冒号的长字符串转换为字典格式'''
     list_temp = []
@@ -87,10 +88,12 @@ def list_to_dict(list_info, sep=':'):  # 输入列表， 以分隔符分隔， �
 
     return dict_info
 
+
 def timeStamp():
     client_time = datetime.datetime.now()
     readable_time = client_time.strftime('%Y-%m-%d_%H_%M_%S')
     return readable_time
+
 
 def get_uptime():
     # 获取服务器开机时长信息
@@ -103,11 +106,11 @@ def get_uptime():
 
     return uptime_seconds, uptime
 
+
 # ------ 获取信息 ------ #
 def get_data():
-
-
-    def get_running_script():  # 获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, ppid]]
+    def get_running_script(
+    ):  # 获取当前正在运行的脚本及参数，pid. 返回列表[[command1, args, ppid]]
 
         get_script_full_cmd = "ps -elf | grep -E 'HotPlug_NVMe_suite\.py|ts_.*\.py |runvdb\.py |thermal_shock\.py'|grep -v grep"
         raw_script_list = os.popen(get_script_full_cmd).readlines()
@@ -115,18 +118,21 @@ def get_data():
 
         for line in raw_script_list:
             raw_split_line = re.split(' ', line)
-            split_line = [x.strip('\n') for x in raw_split_line if x]  # 去掉空字符及换行符
+            split_line = [x.strip('\n') for x in raw_split_line
+                          if x]  # 去掉空字符及换行符
 
             for item in split_line:
                 if '.py' in item:
                     script_name = item
-                    script_args = ' '.join(split_line[split_line.index(item) + 1:])
+                    script_args = ' '.join(
+                        split_line[split_line.index(item) + 1:])
                     ppid = split_line[4]
                     command = [script_name, script_args, ppid]
                     commands.append(command)
         return commands
 
-    def get_machine_status():  # 获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]
+    def get_machine_status(
+    ):  # 获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]
         '''获取当前测试机信息，[厂商, 型号, cpu, 内存, nvme node, 开机时间, 网络状态]'''
         global node_info  # 这两个变量用于判断，不需要发送到主控端，所以单列出来
         global net_status  # 这两个变量用于判断，不需要发送到主控端，所以单列出来
@@ -195,33 +201,33 @@ def get_data():
         net_status = ''.join(net_status)
 
         host_info = '{0}-{1}-{2}-{3}'.format(manufacturer, machine_type, cpus,
-                                            mems)
+                                             mems)
 
         return host_info
 
-    def genarate_current_trace():   # 生成trace列表
+    def genarate_current_trace():  # 生成trace列表
 
         global node_info
 
         traces = []
-        running_script = []    
+        running_script = []
         scripts = get_running_script()
         machine = get_machine_status()
-        script_on_dev = {}
 
         for node in node_info:
             for script in scripts:  # 获取当前设备的脚本信息
-                if 'ts_pwr' in script[0] or 'ts_top' in script[0]:    # 掉电影响所有的ssd，所以认为掉电脚本为全局脚本
+                if 'ts_pwr' in script[0] or 'ts_top' in script[0]:  # 掉电影响所有的ssd，所以认为掉电脚本为全局脚本
                     running_script = script
                     break
-                if node in script[1]:   # 除掉电脚本外，特殊指明设备的脚本
+                if node in script[1]:  # 除掉电脚本外，特殊指明设备的脚本
                     running_script = script
-                else:   # 无当前卡相关的脚本
-                    running_script = [] 
+                else:  # 无当前卡相关的脚本
+                    running_script = []
 
             ssd_info = load_ssd_info(node)  # 获取当前设备的状态信息
-            trace = dict([['machine', machine], ['script', running_script]])    # 获取当前设备对应的脚本信息和机器信息
-            trace.update(ssd_info)     # 生成trace
+            trace = dict([['machine', machine],
+                          ['script', running_script]])  # 获取当前设备对应的脚本信息和机器信息
+            trace.update(ssd_info)  # 生成trace
             # 删除不需要监控的trace消息:
             if 'host_write_commands' in trace:
                 del trace['host_write_commands']
@@ -240,6 +246,7 @@ def get_data():
             if 'controller_busy_time' in trace:
                 del trace['controller_busy_time']
             traces.append(trace)
+
         return traces
 
     def read_old_trace(file_name='last_trace.json'):
@@ -255,15 +262,15 @@ def get_data():
 
     return current_traces, old_traces
 
+
 # ------ 处理信息 ------ #
 def process_data(current_traces, old_traces):
     global now_time
-    
+
     def send_info(data, server_ip='10.0.4.155'):
         global net_status
 
         if net_status != '000':  # 如果网络状态异常，则终止发送信息
-            assert net_status=='000', 'network abnormal.'
             return
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -275,7 +282,7 @@ def process_data(current_traces, old_traces):
         except ConnectionRefusedError as e:
             print('overmind not found...')
             return
-    
+
     def list_compare(current_list, last_list):
         # 以第一个列表为基准，返回相对于第二个列表来说，增加的元素列表，和减少的元素列表
         item_add = []
@@ -312,7 +319,7 @@ def process_data(current_traces, old_traces):
         '''
         生成特定识别信息，转交发送函数，发送给服务器
         '''
-        new_traces = []
+
         for sn in add_cards_sn:
             for trace in current_traces:
                 if trace['SN'] == sn:
@@ -332,7 +339,7 @@ def process_data(current_traces, old_traces):
         '''
         # ['R', timestamp, sn, err]
         global now_time
-        new_traces = []
+
         for sn in remove_cards_sn:
             for old_trace in old_traces:
                 if old_trace['SN'] == sn:
@@ -351,39 +358,41 @@ def process_data(current_traces, old_traces):
         return
 
     def process_normal_mode(normal_cards_sn):
-        
         def process_temp_change(key_info):
             '''只监控温度警告时的温度信息，如果变动信息不含警告信息，则忽略'''
             key_list = list(key_info.keys())
-            
+
             for key in key_list:
                 if 'temperature' in key:
                     del key_info[key]
             return key_info
-            
-        def process_script_change(info,key_info):            
+
+        def process_script_change(info, key_info):
             global now_time
             last_list, current_list = info
 
-            if not last_list:   # 检测到脚本启动
+            if not last_list:  # 检测到脚本启动
                 if current_list[-1] == '1':  # 父进程为init进程，则当前进程由系统开机启动
-                    key_info['stop_time'] = ['',''] # 清空stop_time时间戳，因为检测到进程又自动启动了
+                    key_info['stop_time'] = ['', ''
+                                             ]  # 清空stop_time时间戳，因为检测到进程又自动启动了
                 else:
-                    key_info['start_time'] = ['', now_time]    # 该进程非开机启动，发送启动时间戳
-            elif not current_list:    # 检测到脚本终止
-                key_info['stop_time'] = ['', now_time]  # 将stop_time时间戳写入        
-            else:   # 检测到脚本信息变动：
+                    key_info['start_time'] = ['', now_time]  # 该进程非开机启动，发送启动时间戳
+            elif not current_list:  # 检测到脚本终止
+                key_info['stop_time'] = ['', now_time]  # 将stop_time时间戳写入
+            else:  # 检测到脚本信息变动：
                 if last_list[:2] == current_list[:2]:
-                    if current_list[-1] == '1': # 检测到掉电脚本执行后的首次重启
+                    if current_list[-1] == '1':  # 检测到掉电脚本执行后的首次重启
                         del key_info['script']  # 忽略本次变更
-                else:   # 检测到非开机启动进程，发送启动时间戳
+                else:  # 检测到非开机启动进程，发送启动时间戳
                     key_info['start_time'] = ['', now_time]
             return key_info
 
         for sn in normal_cards_sn:
-            current_trace = [trace for trace in current_traces if trace['SN'] == sn][0]
+            current_trace = [
+                trace for trace in current_traces if trace['SN'] == sn
+            ][0]
             old_trace = [trace for trace in old_traces if trace['SN'] == sn][0]
-            head_info = {'now_time': now_time,'SN': sn}
+            head_info = {'now_time': now_time, 'SN': sn}
             key_info = {}
 
             for key in current_trace:
@@ -396,7 +405,7 @@ def process_data(current_traces, old_traces):
             if key_info.get('script'):
                 info = key_info.get('script')
                 key_info = process_script_change(info, key_info)
-            
+
             # 2018_05_15 增加对温度打印的处理
             temp_warn = key_info.get('warning_temperature_time')
             temp_critical = key_info.get('critical_composite_temperature_time')
@@ -405,7 +414,7 @@ def process_data(current_traces, old_traces):
 
             if not key_info:
                 head_info['info_type'] = 'heartbeat'
-            
+
             else:
                 head_info['info_type'] = 'normal_update'
                 head_info.update(key_info)
@@ -416,14 +425,20 @@ def process_data(current_traces, old_traces):
         return
 
     def identify_card_status(current_traces, old_traces):
-        current_cards_sn = [trace['SN'] for trace in current_traces if current_traces]  # 获取当前trace中ssd的names部分
-        last_cards_sn = [trace['SN'] for trace in old_traces if old_traces]  # 获取上次扫描中ssd的names部分
+        current_cards_sn = [
+            trace['SN'] for trace in current_traces if current_traces
+        ]  # 获取当前trace中ssd的names部分
+        last_cards_sn = [trace['SN'] for trace in old_traces
+                         if old_traces]  # 获取上次扫描中ssd的names部分
         add_cards_sn = []
         remove_cards_sn = []
         normal_cards_sn = []
 
-        add_cards_sn, remove_cards_sn = list_compare(current_cards_sn, last_cards_sn)  # 判断是否有丢卡，或新识别卡的情况发生
-        normal_cards_sn = [x for x in current_cards_sn if x not in add_cards_sn]  # 既不是新添加的卡，也不包含弹出的卡
+        add_cards_sn, remove_cards_sn = list_compare(
+            current_cards_sn, last_cards_sn)  # 判断是否有丢卡，或新识别卡的情况发生
+        normal_cards_sn = [
+            x for x in current_cards_sn if x not in add_cards_sn
+        ]  # 既不是新添加的卡，也不包含弹出的卡
 
         if add_cards_sn:
             process_card_add(add_cards_sn)
@@ -437,11 +452,12 @@ def process_data(current_traces, old_traces):
 
     return
 
+
 # ------ main logic ------ #
 # 开机1分钟以内为准备阶段，不做检查
-uptime_seconds, uptime = get_uptime()   # 脚本运行时首先判断开机时长
+uptime_seconds, uptime = get_uptime()  # 脚本运行时首先判断开机时长
 
-while uptime_seconds < 60:
+while uptime_seconds < 30:
     time.sleep(1)
     uptime_seconds, uptime = get_uptime()
 
