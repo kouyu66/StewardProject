@@ -1,12 +1,12 @@
+# coding:utf-8
 #!/usr/bin/env python3
 # chkconfig:2345 80 90
 # description:crowbar.py
-# coding:utf-8
+
 
 import os
 import json
 import socket
-import pandas as pd
 import tkinter
 from tkinter.ttk import Treeview
 
@@ -38,23 +38,8 @@ def request(command, server_ip='10.0.4.155'):
 
 
 def process_result(result):
-    global main_info
 
-    db = json.loads(result)
-    main_info = pd.DataFrame(db)
-    value_in_box = main_info.values.tolist()
-
-    list_value = []
-    for value in value_in_box:
-        if value[0] == 'yes':   # 归档数据在GUI界面不显示
-            continue
-        matchedValue = [
-            value[5], value[8], value[9], value[7], value[10],
-            value[13], value[14], value[15], value[16], value[2], value[6],
-            value[1], value[4], value[3], value[11], value[17], value[12]
-        ]
-        list_value.append(matchedValue)
-
+    list_value = json.loads(result)
     return list_value
 
 
@@ -63,23 +48,20 @@ def fetchAndDisplay():
     command = json.dumps(cmd)
     main_info_str = request(command)
     screen_list = process_result(main_info_str)
-    
-    last_screen = monitordisplay.get_children() # 清空上一屏
+
+    last_screen = monitordisplay.get_children()  # 清空上一屏
     for item in last_screen:
         monitordisplay.delete(item)
-        
+
     for line in screen_list:    # 写入当前数据
         monitordisplay.insert('', 'end', values=line)
-    
+
     return
 
 
 def dump_to_excel():
-    global main_info
-    if main_info.empty:
-        print('no main_info found.')
-        return
-    main_info.to_excel('Total_Info.xlsx')
+    cpcmd = 'pscp -q -pw Password1 root@10.0.4.155:/control/Total_info.xlsx .'
+    os.system(cpcmd)
     return
 
 
@@ -87,11 +69,11 @@ def copy_ssd_history():
     iids = monitordisplay.selection()
     t = iids[0]
     sn = monitordisplay.item(t, 'values')[1]
-    os.system('pscp -q -pw Password1 root@10.0.4.155:/control/{0} .'.format(sn))
-    
+    cpcmd = 'pscp -q -pw Password1 root@10.0.4.155:/control/{0} .'.format(sn)
+    os.system(cpcmd)
+
     return
-    
-    
+
 
 root = tkinter.Tk()
 label = tkinter.Label(root, text='Dera System Test Monitor')
