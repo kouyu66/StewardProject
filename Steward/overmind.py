@@ -17,7 +17,8 @@ global notes
 # 获取时间戳函数：
 def timeStamp():
     now_time = datetime.datetime.now()
-    readable_time = now_time.strftime('%Y-%m-%d %H:%M:%S')
+    readable_time = now_time.strftime('%Y-%m-%d %H:%M:%S') + '[MC]'
+
     return readable_time
 
 
@@ -31,19 +32,17 @@ def timmer(timmer_pool):
         if line_number_list:
             line_number = line_number_list[0]
 
-            if time.time() - timmer_sn.get(sn) > 1200:  # 该sn超过1200s(20分钟)无响应
+            if time.time() - timmer_sn.get(sn) > 300:  # 该sn超过300s(5分钟)无响应
                 main_info.loc[line_number, 'Online'] = 'Lost Connect'
 
-            elif time.time() - timmer_sn.get(sn) > 10:  # 该sn超过10s无响应，说明机器在重启
+            elif time.time() - timmer_sn.get(sn) > 6:  # 该sn超过6s无响应，说明机器可能在重启
                 main_info.loc[line_number, 'Online'] = 'Booting'
             else:
                 main_info.loc[line_number, 'Online'] = 'Online'
         else:
-            print(
-                'timmer check error,{1} in timmer list but not in main_info {0}'.
-                format(addr[0], sn))
-
-        # time.sleep(5)
+            info = 'timmer check error,{1} in timmer list but not in main_info {0}'.format(
+                addr[0], sn)
+            print(info)
     del timmer_sn
 
     return
@@ -71,6 +70,7 @@ def dataRecv(sock, addr):
         infomationExchange(sock, data, addr)
     sock.close()
     # print('Connection from {0} closed.'.format(addr))
+    return
 
 
 # ------ 创建socket服务器 ------#
@@ -78,8 +78,6 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 6001))
 s.listen(5)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # 在服务器端不使用该端口号时，释放资源
-
-# ------ 创建socket服务器结束 ------#
 
 
 # 信息处理函数：
@@ -108,17 +106,6 @@ def infomationExchange(sock, data, addr):
         global timmer_pool
 
         timmer_pool[decode_data['SN']] = time.time()  # 刷新计时器时间为当前时间
-#        sn = decode_data['SN']
-#
-#        line_number_list = main_info[(main_info.SN == decode_data['SN']) & (
-#            main_info.Archive == 'no')].index.tolist()  # 定位统计表格中该trace的行号
-#        if line_number_list:  # 定位统计表格中该trace的行号
-#            line_number = line_number_list[0]
-#            main_info.loc[line_number,
-#                          'Online'] == 'Online'  # 定位统计表格中该trace的行号
-#        else:
-#            print('{0}-{1} HeartBeat process failed. no matched trace found.{0} - {1}'.format(addr[0], sn))
-
         return
 
     def processUpdate(decode_data):  # 处理update信息
@@ -135,11 +122,10 @@ def infomationExchange(sock, data, addr):
         if line_number_list:  # 定位统计表格中该trace的行号
             line_number = line_number_list[0]  # 定位统计表格中该trace的行号
         else:
-            print(
-                'update process failed. no matched trace found.{0} - {1}'.format(addr[0], decode_data['SN']))
+            print('update process failed. no matched trace found.{0} - {1}'.
+                  format(addr[0], decode_data['SN']))
             return
-        # ------ 刷新统计表online状态 ------ #
-#        main_info.loc[line_number, 'Online'] == 'Online'
+
         # ------ 刷新计时器时间 ------ #
         sn = decode_data.pop('SN')
         test_machine_time = decode_data.pop(
@@ -198,7 +184,7 @@ def infomationExchange(sock, data, addr):
         # 发送trace信息到日志
         info = '[Eject] {0} {1} Card Eject Dected. SN: {2} Err: {3}.'.format(
             decode_data['now_time'], addr[0], decode_data['SN'],
-            decode_data.get['err'])
+            decode_data.get('err'))
 
         with open(decode_data['SN'], 'a') as log:
             log.write(info + '\n')
@@ -238,13 +224,25 @@ def infomationExchange(sock, data, addr):
         return
 
     def processClientFetch(decode_data):
+        '''处理main_info，将数据处理为嵌套列表进行发送'''
         global main_info
-        main_info_dump = main_info.to_json().encode('utf-8')
 
-        info_length = str(len(main_info_dump))
+        value_in_box = main_info.values.tolist()
+        list_value = []
+
+        for value in value_in_box:
+            if value[0] == 'yes':  # 归档数据在GUI界面不显示
+                continue
+
+            matchedValue = value[1:]  # 不显示归档信息
+            list_value.append(matchedValue)
+
+        value_in_box_dump = json.dumps(list_value).encode('utf-8')
+
+        info_length = str(len(value_in_box_dump))
         sock.send(info_length.encode('utf-8'))  # 通知客户端本次的发送量
-        sock.send(main_info_dump)
-#        sock.close()
+        sock.send(value_in_box_dump)
+        #        sock.close()
         return
 
     global notes
@@ -264,10 +262,9 @@ def infomationExchange(sock, data, addr):
 # ------ 创建基础数据结构 ------ #
 timmer_pool = {}  # 创建包含 sn : heart_beat_local_time的本地字典，用来统计ssd的心跳时间
 main_info = pd.DataFrame(columns=[
-    'IP', 'machine', 'boot', 'pcispeed', 'device_status', 'SN', 'Model',
-    'Capacity', 'Format', 'FwRev', 'Err', 'fw_loader_version',
-    'uefi_driver_version', 'script', 'start_time', 'stop_time', 'Online',
-    'Archive'
+    'Archive', 'IP', 'SN', 'boot', 'Online', 'device_status', 'pcispeed',
+    'script', 'start_time', 'stop_time', 'Err', 'Model', 'Capacity', 'FwRev',
+    'Format', 'fw_loader_version', 'uefi_driver_version', 'machine'
 ])
 # ------创建主循环结构 ------#
 while True:
