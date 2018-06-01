@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding:utf-8
 
+import os
 import json
 import time
 import datetime
@@ -17,7 +18,7 @@ global notes
 # 获取时间戳函数：
 def timeStamp():
     now_time = datetime.datetime.now()
-    readable_time = now_time.strftime('%Y-%m-%d %H:%M:%S') + '[MC]'
+    readable_time = now_time.strftime('%Y-%m-%d %H:%M:%S') + ' [MC]'
 
     return readable_time
 
@@ -31,12 +32,11 @@ def timmer(timmer_pool):
             (main_info.SN == sn) & (main_info.Archive == 'no')].index.tolist()
         if line_number_list:
             line_number = line_number_list[0]
+            
+            dif = time.time() - timmer_sn.get(sn)
 
-            if time.time() - timmer_sn.get(sn) > 300:  # 该sn超过300s(5分钟)无响应
-                main_info.loc[line_number, 'Online'] = 'Lost Connect'
-
-            elif time.time() - timmer_sn.get(sn) > 6:  # 该sn超过6s无响应，说明机器可能在重启
-                main_info.loc[line_number, 'Online'] = 'Booting'
+            if dif > 4:
+                main_info.loc[line_number, 'Online'] = 'L.O.S [{0}s]'.format(dif)
             else:
                 main_info.loc[line_number, 'Online'] = 'Online'
         else:
@@ -261,11 +261,16 @@ def infomationExchange(sock, data, addr):
 
 # ------ 创建基础数据结构 ------ #
 timmer_pool = {}  # 创建包含 sn : heart_beat_local_time的本地字典，用来统计ssd的心跳时间
-main_info = pd.DataFrame(columns=[
+
+if os.path.exists('Total_info.xlsx'):
+    main_info = pd.read_excel('Total_info.xlsx')
+else:
+    main_info = pd.DataFrame(columns=[
     'Archive', 'IP', 'SN', 'boot', 'Online', 'device_status', 'pcispeed',
     'script', 'start_time', 'stop_time', 'Err', 'Model', 'Capacity', 'FwRev',
     'Format', 'fw_loader_version', 'uefi_driver_version', 'machine'
 ])
+
 # ------创建主循环结构 ------#
 while True:
     now_time = timeStamp()
