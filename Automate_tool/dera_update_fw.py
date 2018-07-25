@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # 基于固定的firmware存放路径，自动更新dera firmware
 # 支持批量更新
 # 支持指定版本更新
@@ -8,12 +9,9 @@ import re
 
 # 定义变量
 global ssd_info
+global command_pool
 ssd_info = {}
-# project = ''    # dera 项目名
-# firmware_ver = ''   # 需要升级的版本号
-# nand_type = ''  # B16或B17的nand
-# form_factor = ''    # U.2或AIC
-# firmware_name = '' # OUTG9 + firmware_ver
+command_pool = []
 
 # 流程概述
 # 1. 检查升级环境
@@ -51,7 +49,7 @@ def ssd_info_check():
         return 1
     
     for info in info_raw_list:
-        nvme = re.search(r'nvme.', info).group()
+        nvme = re.search(r'nvme\d{1,2}', info).group()
         mn_search = re.search(r'\S{6}-\S{5}-\S{2}', info)
         if not mn_search:  # 用于处理非dera ssd的状况：
             continue
@@ -68,7 +66,7 @@ def process_bootable_drive():
     get_boot_disk = "df -h | grep -E '/boot$'"
     boot_info = os.popen(get_boot_disk).read()
     
-    boot_drive_obj = re.search(r'nvme.', boot_info)
+    boot_drive_obj = re.search(r'nvme\d{1,2}', boot_info)
     if boot_drive_obj:
         nvme = boot_drive_obj.group()
         if nvme in ssd_info.keys():
@@ -76,43 +74,85 @@ def process_bootable_drive():
     return    # 启动盘为非nvme设备，无需处理
 
 def update_command(ssd_info):
-
-    update_mode = input('input 1 for common update\n input 2 for debug firmware upate\n')
+    global command_pool
+    command_dict = {}
+    update_mode = input('\n input 1 for common update\n input 2 for debug firmware upate\n > ')
 
     if update_mode is '1':
-        firmware_ver = input('input firmware version, like "108"\n')
+        firmware_ver = input(' input firmware version, like "108"\n > ')
         
         print('- scaning dera ssd type...')
         path_dict = {
-        'P34UTR-01T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZ3{0}/'.format(firmware_ver)
-        'P34UTR-01T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ3{0}/'.format(firmware_ver)
-        'P34UTR-01T6U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTG9{0}/'.format(firmware_ver)
-        'P34UTR-01T6H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATG9{0}/'.format(firmware_ver)
-        'P34UTR-02T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZ9{0}/'.format(firmware_ver)
-        'P34UTR-02T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ9{0}/'.format(firmware_ver)
-        'P34UTR-03T2U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTGA{0}/'.format(firmware_ver)
-        'P34UTR-03T2H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATGA{0}/'.format(firmware_ver)
-        'P34UTR-04T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OATZA{0}/'.format(firmware_ver)
-        'P34UTR-04T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZA{0}/'.format(firmware_ver)
-        'P34UTR-06T4U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/UD2/OATUA{0}/'.format(firmware_ver)
+        'P34UTR-01T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZ3{0}/'.format(firmware_ver),
+        'P34UTR-01T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ3{0}/'.format(firmware_ver),
+        'P34UTR-01T6U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTG9{0}/'.format(firmware_ver),
+        'P34UTR-01T6H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATG9{0}/'.format(firmware_ver),
+        'P34UTR-02T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZ9{0}/'.format(firmware_ver),
+        'P34UTR-02T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ9{0}/'.format(firmware_ver),
+        'P34UTR-03T2U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTGA{0}/'.format(firmware_ver),
+        'P34UTR-03T2H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATGA{0}/'.format(firmware_ver),
+        'P34UTR-04T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OATZA{0}/'.format(firmware_ver),
+        'P34UTR-04T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZA{0}/'.format(firmware_ver),
+        'P34UTR-06T4U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/UD2/OATUA{0}/'.format(firmware_ver),
         'P34UTR-06T4H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/AIC/OATUA{0}/'.format(firmware_ver)
-    }
-    for key, value in ssd_info:
-        
+        }
 
+    for key, value in ssd_info.items():
+        if value in path_dict.keys():
+            command_dict[key] = path_dict[value]
+        else:
+            print('* warning: unknown dera mn found, update operation will not work on this drive: {0} {1}'.format(key,value))
+            pass
+    
+    update_mode = input(' select update mode:\n 1. boot + cc\n 2. boot + drivecfg\n 3. slot \n >')
+    bootable_drive = process_bootable_drive()
+    
+    for key, value in command_dict.items():
+        if key == bootable_drive and update_mode is '1' or update_mode is '2':
+            boot_drive_select = input('* warning: boot drive will update firmware slot to avoid data loss. press Enter to continue, or press N if you want to wipe out boot drive.\n > ')
+            if not boot_drive_select == 'N' and not boot_drive_select == 'n':
+                command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+                command_pool.append(command1)
 
+        if update_mode is '1':
+            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
+            command2 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
+            command_pool.append(command1)
+            command_pool.append(command2)
+        elif udpate_mode is '2':
+            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
+            command2 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'drive*')
+            command_pool.append(command1)
+            command_pool.append(command2)
+        elif update_mode is '3':
+            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+            command_pool.append(command1)
+    return
+    # return command_dict
 
+def update_fw(commamd):
+    return_code = os.system(command)
+    if return_code != 0:
+        device_name = re.search(r'nvme\d{1,2}', command).group()
+        print('* warning: {0} firmware update fail. please try it manually.'.format(device_name))
+    else:
+        print('- firmware update success - {0}'.format(device_name))
+    return
+
+def multiThreadDeamon(funcname, listname):
+    threadIndex = range(len(listname))
+    threads = []
+    for num in threadIndex :
+        t = threading.Thread(target=funcname, args=(listname[num],), daemon=True)
+        threads.append(t)
+    for num in threadIndex:
+        threads[num].start()
+    return
     
     
-    
-    
-    elif update_mode is '2':
-        pass
-    else: 
-        print('invalid input. script exit.')
-        exit()
-
-# def process_bootable_drive():
-#     '''处理启动盘的firmware升级动作'''
-
-    # print('boot drive is {0}'.format(boot_drive))    
+env_check()
+ssd_info_check()
+bootable_drive = process_bootable_drive()
+command_dict = update_command(ssd_info)
+for item in command_pool:
+    print(item + '\n')
