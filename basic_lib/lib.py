@@ -1,7 +1,7 @@
-#！
+#!/usr/bin/env python3
 # 用于linux平台的基础库
 
-# 从列表中选择一个
+# 从列表中选择一项
 def select_from_list(list_obj):
     if not list_obj:    # 空列表检查
         print('empty list detected. no selection is needed.')
