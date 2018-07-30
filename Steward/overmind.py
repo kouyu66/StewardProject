@@ -35,7 +35,7 @@ def timmer(timmer_pool):
             
             dif = time.time() - timmer_sn.get(sn)
 
-            if dif > 4:
+            if dif > 8:
                 main_info.loc[line_number, 'Online'] = 'L.O.S [{0}s]'.format(dif)
             else:
                 main_info.loc[line_number, 'Online'] = 'Online'

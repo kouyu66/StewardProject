@@ -47,6 +47,22 @@ def load_ssd_info(node):
     disk_name = re.split('/', node)[-1]  # 获取nvme*
     ssd_info = {}
     # ------ 给ssd各项值赋值 ------ #
+    # 获取dera info信息添加到字典
+    get_dera_info_cmd = "./nvme dera info {0}".format(node)
+    dera_info = os.popen(get_dera_info_cmd).readlines()
+    info_dict = list_to_dict(dera_info)
+    if not info_dict:
+        return
+    ssd_info.update(info_dict)
+
+    # 获取status信息并添加到字典
+    get_dera_state_cmd = "./nvme dera state {0}".format(node)
+    dera_state = os.popen(get_dera_state_cmd).readlines()
+    state_dict = list_to_dict(dera_state)
+    if not state_dict:
+        return
+    ssd_info.update(state_dict)
+    
     # 获取pci速度信息添加到字典
     pci_speed_processed = get_pci_speed(disk_name)
     ssd_info['pcispeed'] = pci_speed_processed
@@ -59,16 +75,6 @@ def load_ssd_info(node):
     else:
         boot = 'Slave'
     ssd_info['boot'] = boot
-
-    # 获取dera info信息添加到字典
-    get_dera_info_cmd = "./nvme dera info {0}".format(node)
-    dera_info = os.popen(get_dera_info_cmd).readlines()
-    ssd_info.update(list_to_dict(dera_info))
-
-    # 获取status信息并添加到字典
-    get_dera_state_cmd = "./nvme dera state {0}".format(node)
-    dera_state = os.popen(get_dera_state_cmd).readlines()
-    ssd_info.update(list_to_dict(dera_state))
 
     return ssd_info
 
@@ -224,16 +230,23 @@ def get_data():
         scripts = get_running_script()
 
         for node in node_info:
-            for script in scripts:  # 获取当前设备的脚本信息
+            # 获取当前设备的脚本信息
+            running_script = []
+            for script in scripts:  
 
                 if 'ts_pwr' in script[0] or 'ts_top' in script[0]:
                     running_script = script
                     break
                 elif node in script[1]:  # 除掉电脚本外，特殊指明设备的脚本
                     running_script = script
-                else:  # 无当前卡相关的脚本
-                    running_script = []
+                    break
+            if not running_script:
+                running_script = []
+
             ssd_info = load_ssd_info(node)  # 获取当前设备的状态信息
+            if not ssd_info:
+                continue    
+            
             trace = dict([['machine', machine], ['script', running_script]])  
             trace.update(ssd_info)  # 生成trace
 

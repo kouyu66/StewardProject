@@ -1,4 +1,4 @@
 {
-    "python.pythonPath": "/usr/local/bin/python3",
+    "python.pythonPath": "C:\\Users\\kouxinyu\\AppData\\Local\\Programs\\Python\\Python36\\python.exe",
     "python.linting.flake8Enabled": false
 }

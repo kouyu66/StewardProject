@@ -20,3 +20,5 @@ gen-graph/m2055.csv
 .gitignore
 Steward/module_test.py
 .vscode/settings.json
+ThermalShock/temp_shock_0_0_.csv
+split
