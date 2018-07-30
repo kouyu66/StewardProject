@@ -137,6 +137,7 @@ def get_data():
                     ppid = split_line[4]
                     command = [script_name, script_args, ppid]
                     commands.append(command)
+
         return commands
 
     def get_machine_status():
@@ -221,7 +222,9 @@ def get_data():
         scripts = get_running_script()
 
         for node in node_info:
+            print(scripts)
             for script in scripts:  # 获取当前设备的脚本信息
+
                 if 'ts_pwr' in script[0] or 'ts_top' in script[0]:
                     running_script = script
                     break
@@ -229,10 +232,10 @@ def get_data():
                     running_script = script
                 else:  # 无当前卡相关的脚本
                     running_script = []
-                print(running_script)
             ssd_info = load_ssd_info(node)  # 获取当前设备的状态信息
             trace = dict([['machine', machine], ['script', running_script]])  
             trace.update(ssd_info)  # 生成trace
+
             # 删除不需要监控的trace消息:
             if 'host_write_commands' in trace:
                 del trace['host_write_commands']
