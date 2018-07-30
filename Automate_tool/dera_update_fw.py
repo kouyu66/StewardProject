@@ -42,7 +42,6 @@ def ssd_info_check():
     get_info_raw_cmd = './nvme dera info | grep nvme'
 
     info_raw_list = os.popen(get_info_raw_cmd).readlines()
-    ssd_num = len(info_raw_list)
 
     if not info_raw_list:
         print('* warning: no nvme devices found.')
@@ -55,6 +54,10 @@ def ssd_info_check():
             continue
         mn = mn_search.group()
         ssd_info[nvme] = mn
+    ssd_num = len(ssd_info)
+    if ssd_num == 0:
+        print('- no dera nvme devices found. update programe will exit.')
+        return 1
 
     print('- {0} dera nvme devices info found:'.format(ssd_num))
     for key, value in ssd_info.items():
@@ -104,55 +107,40 @@ def update_command(ssd_info):
             print('* warning: unknown dera mn found, update operation will not work on this drive: {0} {1}'.format(key,value))
             pass
     
-    update_mode = input(' select update mode:\n 1. boot + cc\n 2. boot + drivecfg\n 3. slot \n >')
+    update_mode = input(' select update mode:\n 1. boot + cc\n 2. boot + drivecfg\n 3. slot \n > ')
     bootable_drive = process_bootable_drive()
     
     for key, value in command_dict.items():
         if key == bootable_drive and update_mode is '1' or update_mode is '2':
             boot_drive_select = input('* warning: boot drive will update firmware slot to avoid data loss. press Enter to continue, or press N if you want to wipe out boot drive.\n > ')
             if not boot_drive_select == 'N' and not boot_drive_select == 'n':
-                command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+                command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
                 command_pool.append(command1)
 
         if update_mode is '1':
-            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
-            command2 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
+            command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
+            command2 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
             command_pool.append(command1)
             command_pool.append(command2)
         elif udpate_mode is '2':
-            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
-            command2 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'drive*')
+            command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
+            command2 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'drive*')
             command_pool.append(command1)
             command_pool.append(command2)
         elif update_mode is '3':
-            command1 = './nvme dera update-fw /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+            command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
             command_pool.append(command1)
     return
-    # return command_dict
 
-def update_fw(commamd):
-    return_code = os.system(command)
-    if return_code != 0:
-        device_name = re.search(r'nvme\d{1,2}', command).group()
-        print('* warning: {0} firmware update fail. please try it manually.'.format(device_name))
-    else:
-        print('- firmware update success - {0}'.format(device_name))
+def update_fw(command):
+    step1 = os.popen(command).read()
+    if not 'Success' in step1:
+        print('* Warning: Command Execute Fail! \n {0}'.format(command))
     return
-
-def multiThreadDeamon(funcname, listname):
-    threadIndex = range(len(listname))
-    threads = []
-    for num in threadIndex :
-        t = threading.Thread(target=funcname, args=(listname[num],), daemon=True)
-        threads.append(t)
-    for num in threadIndex:
-        threads[num].start()
-    return
-    
     
 env_check()
 ssd_info_check()
 bootable_drive = process_bootable_drive()
-command_dict = update_command(ssd_info)
-for item in command_pool:
-    print(item + '\n')
+update_command(ssd_info)
+for command in command_pool:
+    update_fw(command)
