@@ -134,8 +134,14 @@ def update_command(ssd_info):
 
 def update_fw(command):
     step1 = os.popen(command).read()
+    command_split = re.split(r'[/ ]', command)
+    dev_name = command_split[7]
+    firmware_file = command_split[-1]
+
     if not 'Success' in step1:
         print('* Warning: Command Execute Fail! \n {0}'.format(command))
+    else:
+        print('- {0}: firmware {1} update successfully. \n'.format(dev_name, firmware_file))    
     return
     
 env_check()
