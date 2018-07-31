@@ -10,17 +10,10 @@ import re
 # 定义变量
 global ssd_info
 global command_pool
+global return_code
 ssd_info = {}
 command_pool = []
-
-# 流程概述
-# 1. 检查升级环境
-    # nvme工具检查；版本信息获取并打印
-    # T盘挂载，检查任意一个firmware路径是否可访问
-# 2. 获取卡基本信息
-# 3. 确定升级命令
-# 4. 下发命令
-# 5. 检查返回值
+return_code = []
 
 def env_check():
     '''检查nvme工具是否存在，并打印版本号'''
@@ -133,17 +126,23 @@ def update_command(ssd_info):
     return
 
 def update_fw(command):
+    global return_code
     step1 = os.popen(command).read()
     command_split = re.split(r'[/ ]', command)
     dev_name = command_split[7]
     firmware_file = command_split[-1]
 
     if not 'Success' in step1:
-        print('\n* {0}: firmware {1} update fail *'.format(dev_name, firmware_file))
+        results = '* {0}: firmware {1} update fail.'.format(dev_name, firmware_file)
     else:
-        print('\n- {0}: firmware {1} update successful.'.format(dev_name, firmware_file))    
+        results = '- {0}: firmware {1} update successful.'.format(dev_name, firmware_file)
+    return_code.append(results)
     return
     
+def print_results():
+    
+
+
 env_check()
 ssd_info_check()
 bootable_drive = process_bootable_drive()
