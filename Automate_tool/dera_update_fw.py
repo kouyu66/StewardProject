@@ -94,9 +94,9 @@ def update_command(ssd_info):
         'P34UTR-02T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ9{0}/'.format(firmware_ver),
         'P34UTR-03T2U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTGA{0}/'.format(firmware_ver),
         'P34UTR-03T2H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATGA{0}/'.format(firmware_ver),
-        'P34UTR-04T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OATZA{0}/'.format(firmware_ver),
+        'P34UTR-04T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZA{0}/'.format(firmware_ver),
         'P34UTR-04T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZA{0}/'.format(firmware_ver),
-        'P34UTR-06T4U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/UD2/OATUA{0}/'.format(firmware_ver),
+        'P34UTR-06T4U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/UD2/OUTUA{0}/'.format(firmware_ver),
         'P34UTR-06T4H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/AIC/OATUA{0}/'.format(firmware_ver)
         }
 
@@ -139,9 +139,9 @@ def update_fw(command):
     firmware_file = command_split[-1]
 
     if not 'Success' in step1:
-        print('* Warning: Command Execute Fail! \n {0}'.format(command))
+        print('\n* {0}: firmware {1} update fail *'.format(dev_name, firmware_file))
     else:
-        print('- {0}: firmware {1} update successfully. \n'.format(dev_name, firmware_file))    
+        print('\n- {0}: firmware {1} update successful.'.format(dev_name, firmware_file))    
     return
     
 env_check()
