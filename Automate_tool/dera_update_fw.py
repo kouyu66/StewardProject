@@ -139,13 +139,29 @@ def update_fw(command):
     return_code.append(results)
     return
     
-def print_results():
-    
+def multiThread(funcname, listname):
+    """以列表中元素作为参数，列表元素数作为线程个数，多线程执行指定函数
+    阻塞，当所有线程执行完成后才继续主线程"""
+    threadIndex = range(len(listname))
+    threads = []
+    for num in threadIndex :
+        t = threading.Thread(target=funcname, args=(listname[num],))
+        threads.append(t)
+    for num in threadIndex:
+        threads[num].start()
+    for num in threadIndex:
+        threads[num].join()
+    return
 
+def print_results():
+    global return_code
+    for info in return_code:
+        print(info)
+    return
 
 env_check()
 ssd_info_check()
 bootable_drive = process_bootable_drive()
 update_command(ssd_info)
-for command in command_pool:
-    update_fw(command)
+multiThread(update_fw, command_pool)
+print_results()
