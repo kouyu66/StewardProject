@@ -6,13 +6,21 @@
 # 判断更新状态
 import os
 import re
+import threading
+import time
 
 # 定义变量
 global ssd_info
-global command_pool
+global command_pool1
+global command_pool2
+global command_pool3
+global command_pool4
 global return_code
 ssd_info = {}
-command_pool = []
+command_pool1 = []
+command_pool2 = []
+command_pool3 = []
+command_pool4 = []
 return_code = []
 
 def env_check():
@@ -70,7 +78,10 @@ def process_bootable_drive():
     return    # 启动盘为非nvme设备，无需处理
 
 def update_command(ssd_info):
-    global command_pool
+    global command_pool1
+    global command_pool2
+    global command_pool3
+    global command_pool4
     command_dict = {}
     update_mode = input('\n input 1 for common update\n input 2 for debug firmware upate\n > ')
 
@@ -107,22 +118,22 @@ def update_command(ssd_info):
         if key == bootable_drive and update_mode is '1' or update_mode is '2':
             boot_drive_select = input('* warning: boot drive will update firmware slot to avoid data loss. press Enter to continue, or press N if you want to wipe out boot drive.\n > ')
             if not boot_drive_select == 'N' and not boot_drive_select == 'n':
-                command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
-                command_pool.append(command1)
+                command4 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+                command_pool4.append(command4)
 
         if update_mode is '1':
             command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
-            command2 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
-            command_pool.append(command1)
-            command_pool.append(command2)
-        elif udpate_mode is '2':
+            command3 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
+            command_pool1.append(command1)
+            command_pool3.append(command3)
+        elif update_mode is '2':
             command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
             command2 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'drive*')
-            command_pool.append(command1)
-            command_pool.append(command2)
+            command_pool1.append(command1)
+            command_pool2.append(command2)
         elif update_mode is '3':
-            command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
-            command_pool.append(command1)
+            command4 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
+            command_pool4.append(command4)
     return
 
 def update_fw(command):
@@ -134,6 +145,7 @@ def update_fw(command):
 
     if not 'Success' in step1:
         results = '* {0}: firmware {1} update fail.'.format(dev_name, firmware_file)
+        print(command)
     else:
         results = '- {0}: firmware {1} update successful.'.format(dev_name, firmware_file)
     return_code.append(results)
@@ -155,6 +167,8 @@ def multiThread(funcname, listname):
 
 def print_results():
     global return_code
+    return_code.sort()
+    print('\n') # nvme 工具会自动打印‘.’ 为了便于观察结果，故输入换行符
     for info in return_code:
         print(info)
     return
@@ -163,5 +177,7 @@ env_check()
 ssd_info_check()
 bootable_drive = process_bootable_drive()
 update_command(ssd_info)
-multiThread(update_fw, command_pool)
+command_pool_list = [command_pool1, command_pool2, command_pool3, command_pool4]
+for command_pool in command_pool_list:
+    multiThread(update_fw, command_pool)
 print_results()
