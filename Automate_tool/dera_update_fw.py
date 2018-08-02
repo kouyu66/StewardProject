@@ -77,6 +77,7 @@ def process_bootable_drive():
             return nvme
     return    # 启动盘为非nvme设备，无需处理
 
+
 def update_command(ssd_info):
     global command_pool1
     global command_pool2
@@ -85,10 +86,8 @@ def update_command(ssd_info):
     command_dict = {}
     update_mode = input('\n input 1 for common update\n input 2 for debug firmware upate\n > ')
 
-    if update_mode is '1':
+    if update_mode is '1':  # common update模式下，根据mn号自动匹配T盘固定路径下的firmware文件路径
         firmware_ver = input(' input firmware version, like "108"\n > ')
-        
-        print('- scaning dera ssd type...')
         path_dict = {
         'P34UTR-01T0U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/UD2/OUTZ3{0}/'.format(firmware_ver),
         'P34UTR-01T0H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B16/AIC/OATZ3{0}/'.format(firmware_ver),
@@ -103,35 +102,68 @@ def update_command(ssd_info):
         'P34UTR-06T4U-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/UD2/OUTUA{0}/'.format(firmware_ver),
         'P34UTR-06T4H-ST':'/system_repo/tools/fwsmg/EDISON/v{0}/B17/AIC/OATUA{0}/'.format(firmware_ver)
         }
+        for key, value in ssd_info.items():
+            if value in path_dict.keys():
+                command_dict[key] = path_dict[value]
+            else:
+                print('* warning: unknown dera mn found, update operation will not work on this drive: {0} {1}'.format(key,value))
+                pass
 
-    for key, value in ssd_info.items():
-        if value in path_dict.keys():
-            command_dict[key] = path_dict[value]
-        else:
-            print('* warning: unknown dera mn found, update operation will not work on this drive: {0} {1}'.format(key,value))
-            pass
+    elif update_mode is '2':    # debug firmware模式下，不匹配路径，直接使用用户输入的路径作为所有ssd的升级路径
+        # print('* Warning: all ssd will use the same debug firmware.')
+        # firmware_path = input(' input debug firmware path. like /debug/firmware/RATG9113/ \n > ')
+        # for key in ssd_info.keys():
+        #     command_dict[key] = firmware_path
+        firmware_path = input(" input firmware parrent path, like /debug/firmware/RUTZ3110, input'/debug/firmware/'\n* warning: make sure the firmware folder named like RUTZ3*\n > ")
+        path_dict = {
+        'P34UTR-01T0U-ST':'{0}RUTZ3*/'.format(firmware_path),
+        'P34UTR-01T0H-ST':'{0}RATZ3*/'.format(firmware_path),
+        'P34UTR-01T6U-ST':'{0}RUTG9*/'.format(firmware_path),
+        'P34UTR-01T6H-ST':'{0}RATG9*/'.format(firmware_path),
+        'P34UTR-02T0U-ST':'{0}RUTZ9*/'.format(firmware_path),
+        'P34UTR-02T0H-ST':'{0}RATZ9*/'.format(firmware_path),
+        'P34UTR-03T2U-ST':'{0}RUTGA*/'.format(firmware_path),
+        'P34UTR-03T2H-ST':'{0}RATGA*/'.format(firmware_path),
+        'P34UTR-04T0U-ST':'{0}RUTZA*/'.format(firmware_path),
+        'P34UTR-04T0H-ST':'{0}RATZA*/'.format(firmware_path),
+        'P34UTR-06T4U-ST':'{0}RUTUA*/'.format(firmware_path),
+        'P34UTR-06T4H-ST':'{0}RATUA*/'.format(firmware_ver)
+        }
+        for key, value in ssd_info.items():
+            if value in path_dict.keys():
+                command_dict[key] = path_dict[value]
+            else:
+                print('* warning: unknown dera mn found, update operation will not work on this drive: {0} {1}'.format(key,value))
+                pass
     
-    update_mode = input(' select update mode:\n 1. boot + cc\n 2. boot + drivecfg\n 3. slot \n > ')
+    update_file = input(' select update mode:\n 1. boot + cc\n 2. boot + drivecfg\n 3. slot \n > ')
     bootable_drive = process_bootable_drive()
     
     for key, value in command_dict.items():
-        if key == bootable_drive and update_mode is '1' or update_mode is '2':
-            boot_drive_select = input('* warning: boot drive will update firmware slot to avoid data loss. press Enter to continue, or press N if you want to wipe out boot drive.\n > ')
-            if not boot_drive_select == 'N' and not boot_drive_select == 'n':
+        if key == bootable_drive and update_file != '3':
+            message = '''* warning: boot drive will not be update. press Enter to continue\n
+            * or press u to update fwslot to avoid data loss\n
+            * or press d to update what you chouse and wipe out boot drive.\n > '''
+
+            boot_drive_select = input(message)
+            if boot_drive_select == 'u':
                 command4 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
                 command_pool4.append(command4)
+                continue
+            elif not boot_drive_select:
+                continue
 
-        if update_mode is '1':
+        if update_file is '1':
             command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
             command3 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'cc*')
             command_pool1.append(command1)
             command_pool3.append(command3)
-        elif update_mode is '2':
+        elif update_file is '2':
             command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
             command2 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'drive*')
             command_pool1.append(command1)
             command_pool2.append(command2)
-        elif update_mode is '3':
+        elif update_file is '3':
             command4 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
             command_pool4.append(command4)
     return
@@ -140,7 +172,7 @@ def update_fw(command):
     global return_code
     step1 = os.popen(command).read()
     command_split = re.split(r'[/ ]', command)
-    dev_name = command_split[7]
+    dev_name = re.search(r'nvme\d{1,2}', command).group()
     firmware_file = command_split[-1]
 
     if not 'Success' in step1:
@@ -173,11 +205,24 @@ def print_results():
         print(info)
     return
 
+def path_verify(command_pool):
+    for command in command_pool:
+        fw_file = re.split(r' ', command)[-1]
+        dev_name = re.search(r'nvme\d{1,2}', command).group()        
+        fw_parrent_folder = '/'.join(re.split('/', fw_file)[0:-1])
+        if not os.path.exists(fw_parrent_folder):
+            print('* {0}: firmware {1} update fail: file not found.'.format(dev_name, fw_file))
+            command_pool.remove(command)
+        else:
+            pass
+    return
+
 env_check()
 ssd_info_check()
 bootable_drive = process_bootable_drive()
 update_command(ssd_info)
 command_pool_list = [command_pool1, command_pool2, command_pool3, command_pool4]
 for command_pool in command_pool_list:
+    # path_verify(command_pool) # debug firmware由于使用了通配符，不支持该检查
     multiThread(update_fw, command_pool)
 print_results()
