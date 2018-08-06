@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# 基于固定的firmware存放路径，自动更新dera firmware
-# 支持批量更新
-# 支持指定版本更新
-# 支持更新fwslot或者boot + cc
-# 判断更新状态
+# -*- coding:utf-8 -*
+# Author: kouxinyu
+# Email: kouyu66@163.com
+# Version: 0.9.1
+# 采用应答式输入，多线程批量升级机器上连接的Dera SSD固件版本
+
 import os
 import re
 import threading
-import time
 
 # 定义变量
 global ssd_info
@@ -23,16 +23,17 @@ command_pool3 = []
 command_pool4 = []
 return_code = []
 
+
 def env_check():
     '''检查nvme工具是否存在，并打印版本号'''
     if not os.path.exists('nvme'):
         print('- nvme tool not found. copy tools to current folder...')
         return_code = os.system('cp /system_repo/tools/nvme/nvme .')
         if return_code == 0:
-            print('* nvme tool get successfully.')
+            print('- nvme tool get succesfully.')
         else:
             print('* warning: nvme tool get failed, please check network to drive T')
-            return 1
+            exit()
     p_nvme_ver = (os.popen('./nvme version').read()).strip()
     print(p_nvme_ver)
     return 0
@@ -46,21 +47,22 @@ def ssd_info_check():
 
     if not info_raw_list:
         print('* warning: no nvme devices found.')
-        return 1
+        exit()
     
     for info in info_raw_list:
-        nvme = re.search(r'nvme\d{1,2}', info).group()
-        mn_search = re.search(r'\S{6}-\S{5}-\S{2}', info)
-        if not mn_search:  # 用于处理非dera ssd的状况：
+        mn_search = re.search(r'\S{6}-\S{5}-\S{2}', info)   #逐行检索dera mn号的特征
+        if not mn_search:  # 非dera ssd被抛弃
             continue
-        mn = mn_search.group()
-        ssd_info[nvme] = mn
-    ssd_num = len(ssd_info)
-    if ssd_num == 0:
-        print('- no dera nvme devices found. update programe will exit.')
-        return 1
+        mn = mn_search.group()  # 获取dera mn编号
+        nvme = re.search(r'nvme\d{1,2}', info).group()  # 检索设备号 nvme1 - nvmen
+        ssd_info[nvme] = mn # 将设备号与对应的mn号写入全局字典
 
-    print('- {0} dera nvme devices info found:'.format(ssd_num))
+    dera_ssd_num = len(ssd_info)
+    if dera_ssd_num == 0:
+        print('- no dera nvme devices found. update programe will exit.')
+        exit()
+
+    print('- {0} dera nvme devices info found:'.format(dera_ssd_num))
     for key, value in ssd_info.items():
         print('  {0} : {1}'.format(key, value))
     return ssd_info
@@ -70,15 +72,16 @@ def process_bootable_drive():
     get_boot_disk = "df -h | grep -E '/boot$'"
     boot_info = os.popen(get_boot_disk).read()
     
-    boot_drive_obj = re.search(r'nvme\d{1,2}', boot_info)
+    boot_drive_obj = re.search(r'nvme\d{1,2}', boot_info)   # 使用正则表达式获取系统盘的设备号
     if boot_drive_obj:
         nvme = boot_drive_obj.group()
-        if nvme in ssd_info.keys():
+        if nvme in ssd_info.keys(): # 判断系统盘是否为dera ssd
             return nvme
     return    # 启动盘为非nvme设备，无需处理
 
 
 def update_command(ssd_info):
+    '''确定nvme设备与升级命令的对应关系，根据升级文件的不同，生成四个列表，并处理主盘firmware升级的情况'''
     global command_pool1
     global command_pool2
     global command_pool3
@@ -127,7 +130,7 @@ def update_command(ssd_info):
         'P34UTR-04T0U-ST':'{0}RUTZA*/'.format(firmware_path),
         'P34UTR-04T0H-ST':'{0}RATZA*/'.format(firmware_path),
         'P34UTR-06T4U-ST':'{0}RUTUA*/'.format(firmware_path),
-        'P34UTR-06T4H-ST':'{0}RATUA*/'.format(firmware_ver)
+        'P34UTR-06T4H-ST':'{0}RATUA*/'.format(firmware_path)
         }
         for key, value in ssd_info.items():
             if value in path_dict.keys():
@@ -140,18 +143,18 @@ def update_command(ssd_info):
     bootable_drive = process_bootable_drive()
     
     for key, value in command_dict.items():
-        if key == bootable_drive and update_file != '3':
+        if key == bootable_drive and update_file != '3':    # 处理升级firmware操作遇到主盘的情况
             message = '''* warning: boot drive will not be update. press Enter to continue\n
             * or press u to update fwslot to avoid data loss\n
             * or press d to update what you chouse and wipe out boot drive.\n > '''
 
             boot_drive_select = input(message)
-            if boot_drive_select == 'u':
+            if boot_drive_select == 'u':    #   升级firmware slot，避免主盘数据丢失
                 command4 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'fwslot*')
                 command_pool4.append(command4)
-                continue
+                continue    # 不再针对该盘添加升级命令到其他command_pool
             elif not boot_drive_select:
-                continue
+                continue    # 用户输入为空时，对系统盘不进行升级操作
 
         if update_file is '1':
             command1 = './nvme dera update-fw -y /dev/{0} -f {1}{2}'.format(key, value, 'boot*')
@@ -169,6 +172,7 @@ def update_command(ssd_info):
     return
 
 def update_fw(command):
+    '''执行firmware升级动作，判断是否成功，并把结果汇总到全局列表'''
     global return_code
     step1 = os.popen(command).read()
     command_split = re.split(r'[/ ]', command)
@@ -198,6 +202,7 @@ def multiThread(funcname, listname):
     return
 
 def print_results():
+    '''打印升级状态文本'''
     global return_code
     return_code.sort()
     print('\n') # nvme 工具会自动打印‘.’ 为了便于观察结果，故输入换行符
