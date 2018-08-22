@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # 用于linux平台的基础库
+import threading
 
 # 从列表中选择一项
 def select_from_list(list_obj):
@@ -31,7 +32,7 @@ def multiThread(funcname, listname):
     阻塞，当所有线程执行完成后才继续主线程"""
     threadIndex = range(len(listname))
     threads = []
-    for num in threadIndex :
+    for num in threadIndex:
         t = threading.Thread(target=funcname, args=(listname[num],))
         threads.append(t)
     for num in threadIndex:
@@ -40,12 +41,12 @@ def multiThread(funcname, listname):
         threads[num].join()
     return
 
-def multiThreadDeamon(funcname, listname):
+def multiThreadDaemon(funcname, listname):
     '''以列表中元素作为参数，列表元素个数作为线程数，多线程执行指定函数
     非阻塞，主线程不等待子线程执行结束，且主线程退出时，子线程立即退出'''
     threadIndex = range(len(listname))
     threads = []
-    for num in threadIndex :
+    for num in threadIndex:
         t = threading.Thread(target=funcname, args=(listname[num],), daemon=True)
         threads.append(t)
     for num in threadIndex:
