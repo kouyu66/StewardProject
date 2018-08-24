@@ -7,12 +7,13 @@
 # linux only for now 模块化各个函数，以便于后续调用
 
 import os
+import re
 
-deraSSDMonitor()            # 用于监控dera ssd state信息的变动情况
-osInfoGenerator()           # 用于生成操作系统的关键信息
-powerOprationMonitor()      # 用于记录测试机的上下电相关动作
-messageGenerator()          # 关键信息生成器
-messageProcessor()          # 关键信息处理器
+# deraSSDMonitor()            # 用于监控dera ssd state信息的变动情况
+# osInfoGenerator()           # 用于生成操作系统的关键信息
+# powerOprationMonitor()      # 用于记录测试机的上下电相关动作
+# messageGenerator()          # 关键信息生成器
+# messageProcessor()          # 关键信息处理器
 # ---------------------
 def nvme_tool_check():
     '''检查nvme工具是否存在，并打印版本号'''
@@ -28,5 +29,25 @@ def nvme_tool_check():
     print('- ' + p_nvme_ver)
     return 0
 
-def ssd_state():
+def ssd_state(node):
+    '''输入字符设备，输出nvme状态信息（字典）'''
+
+    state_info = {}
+    list_temp = []
+    get_state_cmd = './nvme dera state /dev/{0}'.format(node)       
+    sep = ':'
+    raw_out_put = os.popen(get_state_cmd).readlines()
+    for line in raw_out_put:
+        if line.count(sep) != 1:
+            continue                                                # 抛弃分隔符不存在或不唯一的行
+        seprate_line = re.split(sep, line)
+        seprate_line = [
+            x.replace('\t', '').replace('\n', '').replace(' ', '')  # 字符清理
+            for x in seprate_line
+        ]
+        list_temp.append(seprate_line)
+    state_info = dict(list_temp)
+    return state_info
+
+def state_comp(last_dict, current_dict):
     pass
