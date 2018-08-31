@@ -50,4 +50,17 @@ def ssd_state(node):
     return state_info
 
 def state_comp(last_dict, current_dict):
-    pass
+    delete = []
+    add = []
+    update = []
+    if last_dict == current_dict:
+        return 0
+    for key in last_dict.keys():
+        # if last_dict[key] == 
+        pass
+
+
+
+last_dict = {'name':'jack'}
+current_dict = {'name':'jack'}
+print(last_dict.items())
