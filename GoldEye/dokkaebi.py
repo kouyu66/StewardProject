@@ -8,15 +8,18 @@
 
 import os
 import re
+import time
 
 # deraSSDMonitor()            # 用于监控dera ssd state信息的变动情况
 # osInfoGenerator()           # 用于生成操作系统的关键信息
 # powerOprationMonitor()      # 用于记录测试机的上下电相关动作
 # messageGenerator()          # 关键信息生成器
 # messageProcessor()          # 关键信息处理器
-# ---------------------
+
+# ------ system function ------ #
 def nvme_tool_check():
     '''检查nvme工具是否存在，并打印版本号'''
+
     if not os.path.exists('nvme'):
         print('- nvme tool not found. copy tools to current folder...')
         return_code = os.system('cp /system_repo/tools/nvme/nvme .')
@@ -49,18 +52,39 @@ def ssd_state(node):
     state_info = dict(list_temp)
     return state_info
 
+# ------ python function ------ #
 def state_comp(last_dict, current_dict):
-    delete = []
-    add = []
+    '''比较两个字典，以列表形式返回key（4个列表）'''
+
+    good = []
     update = []
+    add = []
+    delete = []
     if last_dict == current_dict:
-        return 0
+        return good, update, add, delete
     for key in last_dict.keys():
-        # if last_dict[key] == 
-        pass
+        if key in current_dict.keys():
+            if last_dict[key] == current_dict[key]:
+                good.append(key)
+            else:
+                update.append(key)
+        else:
+            delete.append(key)
+    add = [key for key in current_dict.keys() if key not in last_dict.keys()]
+    return good, update, add, delete
 
+# ------ debug zone ------ #
+last_dict = {}
+if nvme_tool_check() == 0:
+    while True:
+        current_dict = ssd_state('nvme0')
+        good, update, add, delete = state_comp(last_dict, current_dict)
+        for key in update:
+            print('{0}: {1} ==> {2}'.format(key,last_dict[key],current_dict[key]))
+        for key in add:
+            print('new key add ==> {0} : {1}'.format(key, current_dict[key]))
+        for key in delete:
+            print('old key remove ==> {0} : {1}'.format(key, last_dict[key]))
 
-
-last_dict = {'name':'jack'}
-current_dict = {'name':'jack'}
-print(last_dict.items())
+        last_dict = current_dict
+        time.sleep(1)
