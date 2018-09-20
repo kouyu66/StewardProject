@@ -16,6 +16,17 @@ import time
 # messageGenerator()          # 关键信息生成器
 # messageProcessor()          # 关键信息处理器
 
+# 定义所需的类
+class DeraSSD(object):
+    def __init__(self, node):
+        self.node = node
+        self.info = {}
+        self.state = False
+
+    def update(self):
+        pass
+
+
 # ------ system function ------ #
 def nvme_tool_check():
     '''检查nvme工具是否存在，并打印版本号'''
@@ -74,17 +85,20 @@ def state_comp(last_dict, current_dict):
     return good, update, add, delete
 
 # ------ debug zone ------ #
-last_dict = {}
-if nvme_tool_check() == 0:
-    while True:
-        current_dict = ssd_state('nvme0')
-        good, update, add, delete = state_comp(last_dict, current_dict)
-        for key in update:
-            print('{0}: {1} ==> {2}'.format(key,last_dict[key],current_dict[key]))
-        for key in add:
-            print('new key add ==> {0} : {1}'.format(key, current_dict[key]))
-        for key in delete:
-            print('old key remove ==> {0} : {1}'.format(key, last_dict[key]))
+# last_dict = {}
+# if nvme_tool_check() == 0:
+#     while True:
+#         current_dict = ssd_state('nvme0')
+#         good, update, add, delete = state_comp(last_dict, current_dict)
+#         for key in update:
+#             print('{0}: {1} ==> {2}'.format(key,last_dict[key],current_dict[key]))
+#         for key in add:
+#             print('new key add ==> {0} : {1}'.format(key, current_dict[key]))
+#         for key in delete:
+#             print('old key remove ==> {0} : {1}'.format(key, last_dict[key]))
 
-        last_dict = current_dict
-        time.sleep(1)
+#         last_dict = current_dict
+#         time.sleep(1)
+nvme0 = DeraSSD('nvme0')
+nvme_info = nvme0.info
+print(nvme_info)
